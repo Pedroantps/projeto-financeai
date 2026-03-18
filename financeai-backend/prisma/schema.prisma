@@ -1,0 +1,60 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ------------------------------------------------------
+// 1. Tabela de Usuários 
+// ------------------------------------------------------
+model Usuario {
+  id        String   @id @default(uuid())
+  nome      String
+  email     String   @unique
+  senha     String   // Guardaremos a senha criptografada (hash) aqui
+  criadoEm  DateTime @default(now())
+
+  // Relacionamento: Um usuário pode ter várias conexões bancárias
+  conexoes  ConexaoBancaria[]
+}
+
+model ConexaoBancaria {
+  id           String   @id @default(uuid())
+  pluggyItemId String   @unique // O código "a1b2c3..." da Pluggy
+  banco        String   // Nome da instituição (Itaú, Nubank, etc)
+  criadoEm     DateTime @default(now())
+
+  // Relacionamento com o Usuário Dono da Conta
+  usuarioId    String
+  usuario      Usuario  @relation(fields: [usuarioId], references: [id])
+
+  // Relacionamento com as Transações
+  transacoes   Transacao[]
+}
+
+// ------------------------------------------------------
+// 3. Tabela de Transações 
+// ------------------------------------------------------
+model Transacao {
+  id                  String   @id @default(uuid())
+  pluggyTransactionId String   @unique // Evita duplicar compras
+  
+  // O que a Inteligência Artificial processou
+  descricaoOriginal   String
+  nomeLimpo           String
+  categoria           String
+  
+  // O seu filtro de Finanças
+  valor               Float    // Negativo = Saída, Positivo = Entrada
+  dataOcorrencia      DateTime // A data em que o gasto ocorreu
+  dataFatura          DateTime? // NULO se for PIX/Débito. Preenchido se for Crédito.
+  tipoPagamento       String   // "CREDITO", "DEBITO", "PIX", etc.
+  
+  // Relacionamento com a Conexão
+  conexaoId           String
+  conexao             ConexaoBancaria @relation(fields: [conexaoId], references: [id])
+
+  criadoEm            DateTime @default(now())
+}
