@@ -1,56 +1,104 @@
-# FinanceAI - Gestão Financeira Inteligente com Open Finance e IA
+# 🚀 FinanceAI - Consultor Financeiro Inteligente
 
-## 1. Visão Geral do Projeto
-O **FinanceAI** é uma aplicação web full-stack desenvolvida para automatizar e otimizar a gestão de finanças pessoais. O sistema substitui a tediosa inserção manual de gastos por uma sincronização direta com as contas bancárias do usuário via **Open Finance**. 
+> O **FinanceAI** é uma plataforma moderna de gestão financeira que elimina a necessidade de planilhas manuais. Através da tecnologia de **Open Finance**, conecta-se de forma segura aos seus bancos e utiliza **Inteligência Artificial (Llama 3.3)** para categorizar gastos e gerar insights personalizados.
 
-O grande diferencial do projeto é a utilização de **Inteligência Artificial (LLMs)** no back-end para processar as descrições confusas dos extratos bancários (ex: "COMPRA CARTAO PAG*IFOOD"), higienizando os dados e categorizando as despesas automaticamente (ex: "Alimentação - iFood"). O resultado é entregue ao usuário em um dashboard interativo e em tempo real.
+---
 
-## 2. Arquitetura e Stack Tecnológica
-O projeto adota uma arquitetura cliente-servidor, separando claramente as responsabilidades de interface, regras de negócio e integrações externas.
+## ✨ Principais Funcionalidades
 
-* **Front-end:** Next.js, React, Tailwind CSS (para estilização responsiva) e Chart.js (para visualização de dados).
-* **Back-end:** Node.js com Express.js (construção da API RESTful).
-* **Integrações (APIs Externas):**
-  * **Pluggy API:** Atua como o agregador de Open Finance, fornecendo o ambiente de Sandbox para simulação de conexão bancária e extração de transações.
-  * **Groq API:** Motor de Inteligência Artificial utilizado para o Processamento de Linguagem Natural (NLP), responsável por limpar e categorizar as transações brutas.
-* **Banco de Dados:** PostgreSQL (sugestão) para armazenamento persistente e seguro das transações já processadas.
+- **🏦 Sincronização Bancária Automática:** Integração com a API Pluggy para puxar extratos bancários automaticamente.
+- **🧠 Consultor de Bolso IA:** A IA (Groq/Llama 3.3) analisa o seu volume de ganhos e gastos mensais, oferecendo dicas práticas, alertas de gastos excessivos e destaques positivos.
+- **🛡️ Caching Inteligente (Token Saver):** Arquitetura otimizada que compara o volume financeiro antes e depois da sincronização. A IA só é consultada novamente se houver novas transações no mês.
+- **📊 Dashboard Interativo:** Gráficos dinâmicos com filtros de alcance de datas e filtros independentes para o consultor IA (Estilo Power BI).
+- **🌗 Modo Escuro / Claro:** Suporte nativo e fluido com persistência de memória (`localStorage`) e *Fade-in Hydration* para evitar ecrãs brancos.
+- **📱 Design Totalmente Responsivo:** UI/UX premium baseada em *Glassmorphism*, com barra lateral retrátil (Desktop) e menu *Drawer* com clique de fecho no fundo (Mobile).
 
-## 3. Descrição dos Diagramas de Arquitetura (UML)
+---
 
-Para fins de documentação visual e entendimento do fluxo de dados, o sistema baseia-se nas seguintes modelagens:
+## 🛠️ Stack Tecnológica
 
-### 3.1. Diagrama de Casos de Uso
-Descreve as interações diretas do usuário com o sistema:
-* **Ator Principal:** Usuário final.
-* **Ações:** 
-  * "Conectar Conta Bancária" (aciona o widget do Open Finance).
-  * "Visualizar Dashboard de Gastos" (exibe gráficos gerados pelo front-end).
-  * "Sincronizar Novas Transações" (solicita ao back-end a atualização do extrato).
+### Frontend (`financeai-frontend`)
+- **Framework:** Next.js (React)
+- **Estilização:** Tailwind CSS
+- **Ícones:** Lucide React
+- **Gráficos:** Recharts
 
-### 3.2. Diagrama de Sequência (Fluxo de Sincronização)
-Descreve a comunicação passo a passo entre as camadas do sistema durante a extração e processamento de dados:
-1. O **Front-end (Next.js)** envia uma requisição de sincronização para a **API Interna (Node.js)**.
-2. A **API Interna** autentica a requisição e chama a **API da Pluggy**, solicitando o extrato bruto dos últimos 30 dias.
-3. A **Pluggy** retorna um JSON com as transações bancárias (com descrições sujas e sem categoria).
-4. A **API Interna** itera sobre essas transações e envia um prompt estruturado para a **API do Groq (IA)**.
-5. A **API do Groq** analisa o contexto de cada descrição e retorna um JSON com o "Nome Limpo" e a "Categoria Mapeada".
-6. A **API Interna** salva esse dado consolidado no **Banco de Dados**.
-7. A **API Interna** responde ao **Front-end** com o status de sucesso e os dados prontos para a geração dos gráficos.
+### Backend (`financeai-backend`)
+- **Ambiente:** Node.js
+- **Framework:** Express.js
+- **ORM & Base de Dados:** Prisma + SQLite
+- **Integrações:** Groq API (IA) e Pluggy API (Open Finance)
 
-## 4. Segurança e Boas Práticas
-Tratando-se de dados financeiros simulados e integrações sensíveis, o projeto implementa as seguintes diretrizes de segurança:
-* **Isolamento de Credenciais:** As chaves de API da Pluggy e do Groq residem exclusivamente no servidor (Node.js). O Front-end não possui acesso a esses *secrets*.
-* **Gerenciamento de Variáveis de Ambiente:** Utilização de arquivos `.env` para armazenar credenciais localmente, com a inclusão deste arquivo no `.gitignore` para evitar vazamentos no repositório público.
-* **Comunicação Segura:** O widget de conexão bancária (Pluggy Connect) roda em um ambiente isolado em iframe, garantindo que as credenciais do banco do usuário nunca passem pelo back-end da aplicação.
+---
 
-## 5. Guia de Instalação e Execução (Setup)
+## 🚀 Como Executar o Projeto Localmente
+
+Para rodar o projeto, você precisará abrir **dois terminais separados**: um para o Backend e outro para o Frontend.
 
 ### Pré-requisitos
-* Node.js (v18 ou superior)
-* Gerenciador de pacotes (npm ou yarn)
-* Contas de desenvolvedor ativas na [Pluggy](https://pluggy.ai/) e no [Groq](https://groq.com/).
+- [Node.js](https://nodejs.org/) instalado.
+- Conta e Chaves API da [Groq](https://console.groq.com/).
+- Conta e Chaves API da [Pluggy](https://pluggy.ai/).
 
-### Passo a Passo
-1. Clone o repositório:
+---
+
+### Passo 1: Iniciar o Backend e a Base de Dados
+
+1. Abra o seu primeiro terminal e entre na pasta do backend:
    ```bash
-   git clone [https://github.com/seu-usuario/finai.git](https://github.com/seu-usuario/finai.git)
+   cd financeai-backend
+   ```
+
+2. Instale as dependências:
+   ```bash
+   npm install
+   ```
+
+3. Crie um arquivo chamado **`.env`** dentro da pasta `financeai-backend` e cole as suas credenciais:
+   ```env
+   DATABASE_URL="file:./dev.db"
+   PLUGGY_CLIENT_ID="sua_chave_pluggy_aqui"
+   PLUGGY_CLIENT_SECRET="seu_secret_pluggy_aqui"
+   GROQ_API_KEY="sua_chave_groq_aqui"
+   ```
+
+4. Prepare a Base de Dados (Prisma):
+   ```bash
+   npx prisma generate
+   npx prisma db push
+   ```
+
+5. Inicie o servidor Backend:
+   ```bash
+   node server.js
+   ```
+   *(O servidor deve avisar que está rodando na porta 3333).*
+
+---
+
+### Passo 2: Iniciar o Frontend
+
+1. Abra um **novo terminal** e entre na pasta do frontend:
+   ```bash
+   cd financeai-frontend
+   ```
+
+2. Instale as dependências do React/Next.js:
+   ```bash
+   npm install
+   ```
+
+3. Inicie a aplicação:
+   ```bash
+   npm run dev
+   ```
+
+4. Acesse no seu navegador: **[http://localhost:3000](http://localhost:3000)**
+
+---
+
+## 🤝 Contribuições
+
+Este projeto foi construído combinando as melhores práticas de Engenharia de Software com integrações de IA e Open Finance. Sinta-se à vontade para fazer um *fork* e melhorá-lo!
+
+Desenvolvido com dedicação por **[Pedro Antonio]**
