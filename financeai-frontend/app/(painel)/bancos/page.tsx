@@ -102,6 +102,18 @@ export default function BancosPage() {
       const res = await fetch(`http://localhost:3333/api/bancos/${bancoId}`, { method: "DELETE" });
       if (res.ok) {
         setBancos(bancos.filter(b => b.id !== bancoId));
+
+        // Limpa o cache de insights da IA no localStorage, pois a base de dados mudou
+        if (userId) {
+          const keysToRemove = [];
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith(`finai_insight_${userId}_`)) {
+              keysToRemove.push(key);
+            }
+          }
+          keysToRemove.forEach(k => localStorage.removeItem(k));
+        }
       }
     } catch (error) {
       alert("Erro ao remover banco.");
