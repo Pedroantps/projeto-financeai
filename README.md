@@ -26,7 +26,7 @@
 ### Backend (`financeai-backend`)
 - **Ambiente:** Node.js
 - **Framework:** Express.js
-- **ORM & Base de Dados:** Prisma + SQLite
+- **ORM & Base de Dados:** Prisma + PostgreSQL
 - **Integrações:** Groq API (IA) e Pluggy API (Open Finance)
 
 ---
