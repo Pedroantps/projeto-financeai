@@ -3,292 +3,194 @@ const express = require('express');
 const cors = require('cors');
 const { PluggyClient } = require('pluggy-sdk');
 const Groq = require('groq-sdk');
-// Importa o Prisma
-// 1. Importa as ferramentas novas
 const { PrismaClient } = require('@prisma/client');
 const { Pool } = require('pg');
 const { PrismaPg } = require('@prisma/adapter-pg');
 
-// 2. Cria o motor de conexão usando a sua chave da Neon (que está no .env)
+// Inicializa as configurações principais e as conexões com o banco de dados via Prisma e Neon
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
-
-// 3. Inicia o Prisma entregando o adaptador para ele (resolvendo o erro de inicialização vazia!)
 const prisma = new PrismaClient({ adapter });
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3333;
 
 app.use(cors());
 app.use(express.json());
 
-// 2. Configurando o "Crachá" de acesso da Pluggy
+// Instancia os clientes das APIs externas necessárias: Pluggy (Open Finance) e Groq (Inteligência Artificial)
 const pluggyClient = new PluggyClient({
-  clientId: process.env.PLUGGY_CLIENT_ID,
-  clientSecret: process.env.PLUGGY_CLIENT_SECRET,
+    clientId: process.env.PLUGGY_CLIENT_ID,
+    clientSecret: process.env.PLUGGY_CLIENT_SECRET,
 });
 
 const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY
+    apiKey: process.env.GROQ_API_KEY
 });
 
+// Rota simples utilizada para a verificação do status de funcionamento do servidor
 app.get('/api/status', (req, res) => {
     res.json({ mensagem: "Servidor FinanceAI rodando!", status: "Online" });
 });
 
-app.get('/api/bancos', async (req, res) => {
-    try {
-        const bancos = await pluggyClient.fetchConnectors();
-        
-        res.json(bancos);
-    } catch (erro) {
-        console.error("Erro ao conectar com a Pluggy:", erro);
-        res.status(500).json({ erro: "Falha ao buscar bancos na Pluggy." });
-    }
-});
-
-app.get('/api/teste-ia', async (req, res) => {
-    try {
-        // Simulando um extrato sujo que recebemos do banco
-        const transacaoSuja = "COMPRA CARTAO PAG*IFOOD SAO PAULO DATA 15/03";
-
-        // Pedindo para a IA processar e limpar essa descrição
-        const respostaDaIA = await groq.chat.completions.create({
-            messages: [
-                {
-                    role: "system",
-                    content: "Você é um assistente financeiro especializado em categorizar extratos bancários. Sua missão é ler a descrição suja e retornar APENAS um JSON válido contendo duas chaves: 'nome_limpo' e 'categoria' (Ex: Alimentação, Transporte, Saúde, Moradia). Não responda com nenhum texto além do JSON."
-                },
-                {
-                    role: "user",
-                    content: `Limpe esta transação: ${transacaoSuja}`
-                }
-            ],
-            model: "llama-3.3-70b-versatile", // Modelo super rápido e gratuito do Groq
-            temperature: 0.1, // Temperatura baixa para ela ser objetiva e não inventar coisas
-            response_format: { type: "json_object" } // Garante que a IA nos devolva código e não um texto falado
-        });
-
-        // Extrai o texto da resposta da IA e transforma de volta em JSON real
-        const dadosLimpos = JSON.parse(respostaDaIA.choices[0].message.content);
-
-        // Envia o resultado bonitinho para a nossa tela
-        res.json({
-            original: transacaoSuja,
-            processado: dadosLimpos
-        });
-
-    } catch (erro) {
-        console.error("Erro na IA do Groq:", erro);
-        res.status(500).json({ erro: "Falha ao processar a inteligência artificial." });
-    }
-});
-
-app.get('/api/token', async (req, res) => {
-    try {
-        // Pede para a Pluggy um passe livre temporário
-        const tokenData = await pluggyClient.createConnectToken();
-        res.json({ accessToken: tokenData.accessToken });
-    } catch (erro) {
-        console.error("Erro ao gerar token da Pluggy:", erro);
-        res.status(500).json({ erro: "Falha ao gerar o token de conexão." });
-    }
-});
-
-
-
+// Agrupa as rotas responsáveis pelos fluxos de registro e autenticação segura de usuários
 app.post('/api/cadastro', async (req, res) => {
     try {
         const { nome, email, senha } = req.body;
+        
+        const usuarioExistente = await prisma.usuario.findUnique({ where: { email } });
+        if (usuarioExistente) return res.status(400).json({ erro: "Este e-mail já está em uso." });
 
-        // 1. Verifica se o usuário já existe
-        const usuarioExistente = await prisma.usuario.findUnique({
-            where: { email: email }
-        });
-
-        if (usuarioExistente) {
-            return res.status(400).json({ erro: "Este e-mail já está em uso." });
-        }
-
-        // 2. Salva no banco de dados na nuvem
-        // (Nota: Em produção, nós vamos criptografar essa senha antes de salvar!)
+        // Observação: Para cenários de produção, é obrigatória a utilização de bibliotecas como bcrypt para o hash das senhas
         const novoUsuario = await prisma.usuario.create({
-            data: {
-                nome: nome,
-                email: email,
-                senha: senha 
-            }
+            data: { nome, email, senha } 
         });
 
-        console.log("Novo usuário criado com sucesso:", novoUsuario.nome);
+        console.log("👤 Novo usuário criado:", novoUsuario.nome);
         res.status(201).json({ mensagem: "Conta criada com sucesso!", id: novoUsuario.id });
-
     } catch (erro) {
-        console.error("Erro ao cadastrar usuário:", erro);
+        console.error("Erro no cadastro:", erro);
         res.status(500).json({ erro: "Falha interna ao criar a conta." });
     }
 });
 
-// NOVIDADE 7: Rota para Fazer Login
 app.post('/api/login', async (req, res) => {
     try {
         const { email, senha } = req.body;
-
-        // 1. Procura o usuário no banco de dados
-        const usuario = await prisma.usuario.findUnique({
-            where: { email: email }
-        });
-
-        // 2. Verifica se o usuário existe e se a senha está correta
-        // (Nota: Em produção, usaríamos o bcrypt para comparar senhas criptografadas!)
-        if (!usuario || usuario.senha !== senha) {
+        
+        const usuario = await prisma.usuario.findUnique({ where: { email } });
+        if (!usuario || usuario.senha !== senha) { 
             return res.status(401).json({ erro: "E-mail ou senha incorretos." });
         }
 
-        // 3. Devolve os dados essenciais para o front-end saber quem logou
-        console.log("Login efetuado com sucesso:", usuario.nome);
-        res.json({ 
-            mensagem: "Login aprovado!", 
-            id: usuario.id,
-            nome: usuario.nome 
-        });
-
+        console.log("🔓 Login efetuado:", usuario.nome);
+        res.json({ mensagem: "Login aprovado!", id: usuario.id, nome: usuario.nome });
     } catch (erro) {
         console.error("Erro no login:", erro);
         res.status(500).json({ erro: "Falha interna ao fazer login." });
     }
 });
 
-app.post('/api/bancos/conectar', async (req, res) => {
+// Define os endpoints responsáveis pela integração bancária inicial e o gerenciamento das conexões de conta
+
+// Rota para a geração do token do Connect Widget da Pluggy, consumido posteriormente pelo front-end
+app.get('/api/pluggy/token', async (req, res) => {
     try {
-        const { usuarioId, pluggyItemId, banco } = req.body;
-
-        // Verifica se o usuário enviou os dados certos
-        if (!usuarioId || !pluggyItemId) {
-            return res.status(400).json({ erro: "Dados incompletos." });
-        }
-
-        // Salva a conexão na nuvem usando o Prisma
-        const novaConexao = await prisma.conexaoBancaria.create({
-            data: {
-                usuarioId: usuarioId,
-                pluggyItemId: pluggyItemId,
-                banco: banco || "Banco Desconhecido"
-            }
-        });
-
-        console.log(`Nova conta do ${novaConexao.banco} conectada com sucesso!`);
-        res.status(201).json({ mensagem: "Banco salvo com sucesso!", conexao: novaConexao });
-
+        const tokenData = await pluggyClient.createConnectToken();
+        res.json({ accessToken: tokenData.accessToken });
     } catch (erro) {
-        console.error("Erro ao salvar conexão:", erro);
-        res.status(500).json({ erro: "Falha interna ao salvar o banco." });
+        console.error("Erro na Pluggy (Token):", erro);
+        res.status(500).json({ erro: "Falha ao gerar o token de conexão." });
     }
 });
 
-app.get('/api/bancos/:usuarioId', async (req, res) => {
+// Registra no banco de dados a referência e os metadados de uma conta bancária recém conectada
+app.post('/api/bancos', async (req, res) => {
     try {
-        const { usuarioId } = req.params;
+        const { usuarioId, pluggyItemId, banco } = req.body;
+        if (!usuarioId || !pluggyItemId) return res.status(400).json({ erro: "Dados incompletos." });
 
-        const bancos = await prisma.conexaoBancaria.findMany({
-            where: { usuarioId: usuarioId },
-            orderBy: { criadoEm: 'desc' } // Mostra os mais recentes primeiro
+        const novaConexao = await prisma.conexaoBancaria.create({
+            data: { usuarioId, pluggyItemId, banco: banco || "Banco Desconhecido" }
         });
 
+        console.log(`🏦 Nova conta conectada: ${novaConexao.banco}`);
+        res.status(201).json({ mensagem: "Banco salvo com sucesso!", conexao: novaConexao });
+    } catch (erro) {
+        console.error("Erro ao salvar banco:", erro);
+        res.status(500).json({ erro: "Falha ao salvar a conexão bancária." });
+    }
+});
+
+// Retorna a listagem de todas as conexões bancárias ativas e válidas vinculadas a um determinado usuário
+app.get('/api/bancos/usuario/:id', async (req, res) => {
+    try {
+        const bancos = await prisma.conexaoBancaria.findMany({
+            where: { usuarioId: req.params.id },
+            orderBy: { criadoEm: 'desc' }
+        });
         res.json(bancos);
     } catch (erro) {
-        console.error("Erro ao buscar bancos:", erro);
         res.status(500).json({ erro: "Falha ao buscar as conexões." });
     }
 });
 
-// NOVIDADE 11: Rota para apagar (desconectar) um banco
+// Remove uma conexão bancária do sistema e exclui automaticamente todas as transações nela atreladas (deleção em cascata)
 app.delete('/api/bancos/:id', async (req, res) => {
     try {
         const { id } = req.params;
-
-        // Pede ao Prisma para eliminar o registo com este ID
-        await prisma.conexaoBancaria.delete({
-            where: { id: id }
-        });
-
-        res.json({ mensagem: "Banco desconectado e removido com sucesso!" });
+        const apagadas = await prisma.transacao.deleteMany({ where: { conexaoId: id } });
+        await prisma.conexaoBancaria.delete({ where: { id } });
+        
+        console.log(`🗑️ Banco e ${apagadas.count} transações removidas.`);
+        res.json({ mensagem: "Banco removido com sucesso!" });
     } catch (erro) {
-        console.error("Erro ao eliminar banco:", erro);
         res.status(500).json({ erro: "Falha ao remover a conexão." });
     }
 });
 
-// NOVIDADE 12 (DEFINITIVA): Rota Mestra REAL - Pluggy + Groq AI (Lotes) + Prisma
+// Endpoints principais que orquestram a importação do extrato, o processamento de linguagem natural e a categorização via IA
+
 app.post('/api/transacoes/sincronizar', async (req, res) => {
     try {
         const { conexaoId } = req.body;
-
         const conexao = await prisma.conexaoBancaria.findUnique({ where: { id: conexaoId } });
         if (!conexao) return res.status(404).json({ erro: "Conexão não encontrada." });
 
-        console.log("🔗 Autenticando com a Pluggy...");
-        const authResponse = await fetch('https://api.pluggy.ai/auth', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                clientId: process.env.PLUGGY_CLIENT_ID,
-                clientSecret: process.env.PLUGGY_CLIENT_SECRET
-            })
-        });
-        const authData = await authResponse.json();
-        if (!authData.apiKey) return res.status(401).json({ erro: "Credenciais da Pluggy inválidas" });
-
-        // 3.1: Pegando a conta
-        console.log(`🏦 Buscando contas do Item ID: ${conexao.pluggyItemId}...`);
-        const accountsResponse = await fetch(`https://api.pluggy.ai/accounts?itemId=${conexao.pluggyItemId}`, {
-            headers: { 'X-API-KEY': authData.apiKey }
-        });
-        const accountsData = await accountsResponse.json();
-        if (!accountsData.results || accountsData.results.length === 0) {
-            return res.status(400).json({ erro: "Nenhuma conta encontrada." });
+        console.log(`🔗 Buscando contas na Pluggy para: ${conexao.banco}...`);
+        
+        // Utiliza o SDK da Pluggy para facilitar o acesso e a busca paginada pelas contas dessa conexão específica
+        const accounts = await pluggyClient.fetchAccounts(conexao.pluggyItemId);
+        if (!accounts.results || accounts.results.length === 0) {
+            return res.status(400).json({ erro: "Nenhuma conta encontrada neste banco." });
         }
+        const primeiraContaId = accounts.results[0].id;
 
-        const primeiraContaId = accountsData.results[0].id;
-
-        // 3.2: Pegando TODAS as transações
-        console.log(`💸 Buscando extrato real da Conta ID: ${primeiraContaId}...`);
-        const pluggyResponse = await fetch(`https://api.pluggy.ai/transactions?accountId=${primeiraContaId}`, {
-            headers: { 'X-API-KEY': authData.apiKey }
-        });
-        const pluggyData = await pluggyResponse.json();
-
-        if (!pluggyData.results || pluggyData.results.length === 0) {
+        console.log(`💸 Baixando extrato real...`);
+        const transactions = await pluggyClient.fetchTransactions(primeiraContaId);
+        if (!transactions.results || transactions.results.length === 0) {
             return res.json({ mensagem: "Nenhuma transação encontrada no momento." });
         }
-        const limiteTransacoes = 120; // Para evitar sobrecarregar a IA, vamos limitar a 120 transações por sincronização
-        const todasTransacoes = pluggyData.results.slice(0, limiteTransacoes);
-        console.log(`📦 Foram encontradas ${todasTransacoes.length} transações na Pluggy. Iniciando fatiamento...`);
+        
+        const todasTransacoes = transactions.results.slice(0, 120);
+        console.log(`📦 Encontradas ${todasTransacoes.length} transações. Chamando a IA...`);
 
-        // --- A MÁGICA DO CHUNKING (LOTES) ---
-        const tamanhoDoLote = 30; // Manda 30 transações por vez para a IA
         const transacoesSalvas = [];
+        const tamanhoDoLote = 30;
 
         for (let i = 0; i < todasTransacoes.length; i += tamanhoDoLote) {
             const loteCru = todasTransacoes.slice(i, i + tamanhoDoLote);
-            console.log(`🧠 Processando lote de transações (${i + 1} até ${i + loteCru.length})...`);
+            console.log(`🧠 IA analisando lote (${i + 1} a ${i + loteCru.length}) de ${todasTransacoes.length}...`);
 
-            const listaParaIA = loteCru.map(t => t.description).join(" | ");
+            const listaParaIA = loteCru.map(t => {
+                const temFatura = t.creditCardMetadata ? "Sim" : "Null";
+                return `[Valor: ${t.amount} | Cat. Banco: ${t.category || "Vazia"} | Fatura: ${temFatura}] ${t.description}`;
+            }).join(" || ");
             
             const prompt = `
-            Analise as seguintes descrições de extrato bancário separadas por " | ". 
-            Para cada uma, devolva um JSON estrito contendo um array de objetos com:
-            - "descricaoOriginal"
-            - "nomeLimpo" (nome legível da empresa ou pessoa)
-            - "categoria" (Identifique a categoria de acordo com a descrição, coloque o que for apropriado, sempre tentando ser específico (Ex: Alimentação, Transporte, Saúde, etc).
-            - "tipoPagamento" (Identifique o método lendo a descrição. Ex: se tiver "PIX", devolva "PIX". Se tiver "PAY" ou "COMPRA", perceba se foi Crédito ou Débito. Se for transferência, "TED/DOC". Caso não dê para saber, devolva "Outros").
-            Extrato: ${listaParaIA}
+            Você é um analista financeiro sênior. Analise as transações separadas por " || ".
+            Para CADA UMA, devolva um JSON estrito contendo um array de objetos chamado "transacoes" com as seguintes chaves exatas:
+            - "descricaoOriginal": (mantenha a descrição exata enviada)
+            - "nomeLimpo": (Remova códigos, datas e símbolos. Deixe APENAS o nome limpo da empresa. Ex: "Uber", "McDonalds", "Mercado Livre")
+            - "categoria": (REGRA 1: Olhe a 'Cat. Banco' que eu enviei. Se for útil, use-a como base e traduza. Se for vazia ou genérica, deduza pelo nome. 
+               REGRA 2: Encaixe OBRIGATORIAMENTE em UMA destas opções: 
+               1. "Supermercado" (atacados, mercados, hortifruti)
+               2. "Alimentação" (restaurantes, iFood, lanches)
+               3. "Compras e Lojas" (roupas, eletrônicos, Shoppings, Mercado Livre, Amazon)
+               4. "Transporte" (Uber, 99, postos de gasolina, passagens)
+               5. "Saúde e Farmácia" (farmácias, médicos)
+               6. "Assinaturas" (Netflix, Spotify)
+               7. Use também: Moradia, Educação, Lazer, Serviços, Transferências, Salário, Investimentos. 
+               Se não encaixar em nada, use "Outros".)
+            - "tipoPagamento": (REGRA: Se a 'Fatura' for 'Sim', é "Cartão de Crédito". Se tiver "PIX", é "PIX". Se a 'Fatura' for 'Null' e for negativo, é "Cartão de Débito". Se for positivo, é "Recebimento".)
+            
+            Transações a processar: ${listaParaIA}
             `;
 
             try {
                 const chatCompletion = await groq.chat.completions.create({
                     messages: [{ role: "user", content: prompt }],
-                    model: "llama-3.1-8b-instant", 
+                    model: "llama-3.3-70b-versatile", 
                     temperature: 0.1, 
                     response_format: { type: "json_object" } 
                 });
@@ -296,18 +198,18 @@ app.post('/api/transacoes/sincronizar', async (req, res) => {
                 const iaResponse = JSON.parse(chatCompletion.choices[0].message.content);
                 const transacoesLimpas = iaResponse.transacoes || iaResponse[Object.keys(iaResponse)[0]] || [];
 
-                // Salva o lote no Prisma
                 for (let j = 0; j < loteCru.length; j++) {
                     const tCrua = loteCru[j];
                     const tLimpa = transacoesLimpas[j];
+                    const dataFaturaReal = tCrua.creditCardMetadata?.billDate ? new Date(tCrua.creditCardMetadata.billDate) : null;
 
                     const transacaoSalva = await prisma.transacao.upsert({
                         where: { pluggyTransactionId: tCrua.id },
                         update: {
-                            // Se a transação já existe, vamos sobrepor com a nova análise da IA!
                             nomeLimpo: tLimpa?.nomeLimpo || tCrua.description,
                             categoria: tLimpa?.categoria || "Outros",
-                            tipoPagamento: tLimpa?.tipoPagamento || (tCrua.amount > 0 ? "Recebimento" : "Pagamento")
+                            tipoPagamento: tLimpa?.tipoPagamento || (tCrua.amount > 0 ? "Recebimento" : "Cartão de Débito"),
+                            dataFatura: dataFaturaReal
                         }, 
                         create: {
                             pluggyTransactionId: tCrua.id,
@@ -316,43 +218,34 @@ app.post('/api/transacoes/sincronizar', async (req, res) => {
                             categoria: tLimpa?.categoria || "Outros",
                             valor: tCrua.amount, 
                             dataOcorrencia: new Date(tCrua.date), 
-                            // Pega o tipo da IA, ou usa uma lógica simples de fallback
-                            tipoPagamento: tLimpa?.tipoPagamento || (tCrua.amount > 0 ? "Recebimento" : "Pagamento"),
+                            tipoPagamento: tLimpa?.tipoPagamento || (tCrua.amount > 0 ? "Recebimento" : "Cartão de Débito"),
+                            dataFatura: dataFaturaReal,
                             conexaoId: conexao.id
                         }
-                    });;
+                    });
                     transacoesSalvas.push(transacaoSalva);
                 }
             } catch (erroLote) {
-                console.error(`⚠️ Erro ao processar o lote ${i}:`, erroLote.message);
-                // Se um lote falhar (ex: a IA engasgou), ele avisa no log mas continua o próximo lote!
+                console.error(`⚠️ Erro da IA no lote ${i}:`, erroLote.message);
             }
         }
 
-        console.log(`✅ Sincronização 100% concluída. ${transacoesSalvas.length} transações processadas.`);
+        console.log(`✅ Sincronização 100% concluída. ${transacoesSalvas.length} novas transações guardadas.`);
         res.json({ mensagem: "Sincronização concluída com sucesso!", transacoes: transacoesSalvas });
-
     } catch (erro) {
-        console.error("Erro na sincronização:", erro);
+        console.error("Erro geral na sincronização:", erro);
         res.status(500).json({ erro: "Falha na sincronização inteligente." });
     }
 });
 
-// NOVIDADE 13: Rota para buscar todas as transações de um usuário
 app.get('/api/transacoes/:usuarioId', async (req, res) => {
     try {
-        const { usuarioId } = req.params;
-
-        // 1. Primeiro, descobre quais são as conexões bancárias deste usuário
         const conexoes = await prisma.conexaoBancaria.findMany({
-            where: { usuarioId: usuarioId },
-            select: { id: true } // Traz só o ID para ficar leve
+            where: { usuarioId: req.params.usuarioId },
+            select: { id: true }
         });
-
-        // Extrai só a lista de IDs em um array: ['id1', 'id2']
         const conexoesIds = conexoes.map(c => c.id);
 
-        // 2. Busca as transações que pertencem a essas conexões, ordenadas da mais nova pra mais velha
         const transacoes = await prisma.transacao.findMany({
             where: { conexaoId: { in: conexoesIds } },
             orderBy: { dataOcorrencia: 'desc' }
@@ -360,83 +253,158 @@ app.get('/api/transacoes/:usuarioId', async (req, res) => {
 
         res.json(transacoes);
     } catch (erro) {
-        console.error("Erro ao buscar transações:", erro);
         res.status(500).json({ erro: "Falha ao carregar o extrato." });
     }
 });
 
-// NOVIDADE 14 (ATUALIZADA COM FILTROS): Rota para calcular os dados do Dashboard
 app.get('/api/dashboard/:usuarioId', async (req, res) => {
     try {
-        const { usuarioId } = req.params;
-        const { dataInicio, dataFim } = req.query; // 👈 Pega as datas da URL
+        const { dataInicio, dataFim } = req.query;
+        
+        const conexoes = await prisma.conexaoBancaria.findMany({
+            where: { usuarioId: req.params.usuarioId },
+            select: { id: true }
+        });
 
-        // 1. Acha os bancos do utilizador
+        let filtroDeData = {};
+        if (dataInicio && dataFim) {
+            filtroDeData = {
+                dataOcorrencia: { gte: new Date(dataInicio), lte: new Date(dataFim) }
+            };
+        }
+
+        const transacoes = await prisma.transacao.findMany({
+            where: { 
+                conexaoId: { in: conexoes.map(c => c.id) },
+                ...filtroDeData 
+            }
+        });
+
+        let entradas = 0;
+        let saidas = 0;
+        const gastosPorCategoria = {};
+
+        transacoes.forEach(t => {
+            if (t.valor > 0) {
+                entradas += t.valor;
+            } else {
+                const valorGasto = Math.abs(t.valor); 
+                saidas += valorGasto;
+                gastosPorCategoria[t.categoria] = (gastosPorCategoria[t.categoria] || 0) + valorGasto;
+            }
+        });
+
+        const dadosDoGrafico = Object.keys(gastosPorCategoria)
+            .map(categoria => ({ name: categoria, value: gastosPorCategoria[categoria] }))
+            .sort((a, b) => b.value - a.value);
+
+        res.json({
+            entradas,
+            saidas,
+            saldo: entradas - saidas,
+            grafico: dadosDoGrafico
+        });
+    } catch (erro) {
+        res.status(500).json({ erro: "Falha ao calcular o resumo financeiro." });
+    }
+});
+
+app.get('/api/insights/:usuarioId', async (req, res) => {
+    try {
+        const { usuarioId } = req.params;
+        const { dataInicio, dataFim } = req.query; // Extrai os parâmetros de data através da querystring para a aplicação de restrições de período
+
         const conexoes = await prisma.conexaoBancaria.findMany({
             where: { usuarioId: usuarioId },
             select: { id: true }
         });
         const conexoesIds = conexoes.map(c => c.id);
 
-        // 2. Prepara o Filtro de Data (se o utilizador selecionou alguma coisa)
-        let filtroDeData = {};
-        if (dataInicio && dataFim) {
-            filtroDeData = {
-                dataOcorrencia: {
-                    gte: new Date(dataInicio), // Maior ou igual à data de início
-                    lte: new Date(dataFim)     // Menor ou igual à data de fim
-                }
-            };
+        if (conexoesIds.length === 0) {
+            return res.json({
+                resumo: "Conecte um banco para começarmos.",
+                dicaPratica: "Vá à aba 'Meus Bancos' e adicione a sua primeira conta para receber insights automáticos.",
+                alerta: null,
+                destaquePositivo: null
+            });
         }
 
-        // 3. Pega as transações aplicando o filtro (se houver)
+        // Configura a restrição condicional de datas, adotando os últimos 30 dias corridos como o valor padrão de segurança
+        let filtroData = {};
+        if (dataInicio && dataFim) {
+            filtroData = {
+                dataOcorrencia: { gte: new Date(dataInicio), lte: new Date(dataFim) }
+            };
+        } else {
+            const trintaDiasAtras = new Date();
+            trintaDiasAtras.setDate(trintaDiasAtras.getDate() - 30);
+            filtroData = { dataOcorrencia: { gte: trintaDiasAtras } };
+        }
+
         const transacoes = await prisma.transacao.findMany({
-            where: { 
-                conexaoId: { in: conexoesIds },
-                ...filtroDeData // 👈 Adiciona a regra da data aqui
-            }
+            where: { conexaoId: { in: conexoesIds }, ...filtroData }
         });
 
-        // 4. A MATEMÁTICA (Continua exatamente igual)
-        let totalEntradas = 0;
-        let totalSaidas = 0;
+        if (transacoes.length === 0) {
+            return res.json({
+                resumo: "Ainda não tem transações registadas neste mês.",
+                dicaPratica: "Clique em 'Sincronizar Bancos' no Dashboard para atualizar o seu extrato.",
+                alerta: null,
+                destaquePositivo: null
+            });
+        }
+
+        let totalGanhos = 0;
+        let totalGastos = 0;
         const gastosPorCategoria = {};
 
         transacoes.forEach(t => {
             if (t.valor > 0) {
-                totalEntradas += t.valor;
+                totalGanhos += t.valor;
             } else {
-                const valorGasto = Math.abs(t.valor); 
-                totalSaidas += valorGasto;
-
-                if (gastosPorCategoria[t.categoria]) {
-                    gastosPorCategoria[t.categoria] += valorGasto;
-                } else {
-                    gastosPorCategoria[t.categoria] = valorGasto;
-                }
+                const gasto = Math.abs(t.valor);
+                totalGastos += gasto;
+                gastosPorCategoria[t.categoria] = (gastosPorCategoria[t.categoria] || 0) + gasto;
             }
         });
 
-        const dadosDoGrafico = Object.keys(gastosPorCategoria)
-            .map(categoria => ({
-                name: categoria,
-                value: gastosPorCategoria[categoria]
-            }))
-            .sort((a, b) => b.value - a.value);
+        const categoriasTexto = Object.entries(gastosPorCategoria)
+            .map(([cat, valor]) => `- ${cat}: R$ ${valor.toFixed(2)}`)
+            .join("\n");
 
-        res.json({
-            entradas: totalEntradas,
-            saidas: totalSaidas,
-            saldo: totalEntradas - totalSaidas,
-            grafico: dadosDoGrafico
+        const prompt = `
+        Você é um consultor financeiro sênior. Analise este resumo financeiro:
+        Ganhos: R$ ${totalGanhos.toFixed(2)} | Gastos: R$ ${totalGastos.toFixed(2)} | Saldo: R$ ${(totalGanhos - totalGastos).toFixed(2)}
+        Gastos por Categoria:
+        ${categoriasTexto}
+
+        Devolva um JSON:
+        {
+            "resumo": "Um parágrafo curto (máx 3 linhas) resumindo o mês.",
+            "destaquePositivo": "Um elogio sobre algo bom.",
+            "alerta": "Aviso sobre a categoria com maior gasto. Se o mês for bom, pode ser null.",
+            "dicaPratica": "Dica financeira baseada nos dados."
+        }
+        `;
+
+        console.log("🧠 Solicitando Insights ao Groq...");
+        const chatCompletion = await groq.chat.completions.create({
+            messages: [{ role: "user", content: prompt }],
+            model: "llama-3.3-70b-versatile",
+            temperature: 0.5,
+            response_format: { type: "json_object" } 
         });
 
+        const insightJSON = JSON.parse(chatCompletion.choices[0].message.content);
+        res.json(insightJSON);
+
     } catch (erro) {
-        console.error("Erro ao gerar dashboard:", erro);
-        res.status(500).json({ erro: "Falha ao calcular o resumo financeiro." });
+        console.error("Erro ao gerar insights:", erro);
+        res.status(500).json({ erro: "Falha ao gerar o insight financeiro." });
     }
 });
 
+// Conclui as instâncias e inicia a aplicação, habilitando o servidor para a recepção de requisições na porta especificada
 app.listen(PORT, () => {
     console.log(`🚀 Servidor rodando na porta http://localhost:${PORT}`);
 });

@@ -1,216 +1,179 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
-import dynamic from "next/dynamic";
-import { Loader2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import dynamic from 'next/dynamic';
+import { Plus, Trash2, CheckCircle2, AlertCircle, Clock, Building2, RefreshCw } from "lucide-react";
 
-// Importa a Pluggy de forma segura (só carrega no navegador do usuário)
+// Importa o Pluggy dinamicamente (evita erros no Next.js)
 const PluggyConnect = dynamic(
-  () => import("react-pluggy-connect").then((mod) => mod.PluggyConnect),
+  () => import('react-pluggy-connect').then((mod) => mod.PluggyConnect),
   { ssr: false }
 );
 
+const getEstiloBanco = (nome: string) => {
+  const nomeLower = nome.toLowerCase();
+  if (nomeLower.includes("itaú") || nomeLower.includes("itau")) return { bg: "bg-orange-500", text: "text-white" };
+  if (nomeLower.includes("nubank")) return { bg: "bg-purple-600", text: "text-white" };
+  if (nomeLower.includes("bradesco")) return { bg: "bg-red-600", text: "text-white" };
+  if (nomeLower.includes("brasil") || nomeLower.includes("bb")) return { bg: "bg-yellow-400", text: "text-slate-900" };
+  if (nomeLower.includes("santander")) return { bg: "bg-red-500", text: "text-white" };
+  if (nomeLower.includes("inter")) return { bg: "bg-orange-400", text: "text-white" };
+  return { bg: "bg-blue-600", text: "text-white" };
+};
+
 export default function BancosPage() {
-  const [isMounted, setIsMounted] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  
-  // Estados da Pluggy
-  const [connectToken, setConnectToken] = useState("");
+  const [bancos, setBancos] = useState<any[]>([]);
+  const [loadingBancos, setLoadingBancos] = useState(true);
   const [isPluggyOpen, setIsPluggyOpen] = useState(false);
-  const [bancosConectados, setBancosConectados] = useState([]);
+  const [connectToken, setConnectToken] = useState("");
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
 
-  const [isLoading, setIsLoading] = useState(true);
-
-  const carregarBancos = async (userId: string) => {
-    setIsLoading(true);
-    try {
-      const response = await fetch(`http://localhost:3000/api/bancos/${userId}`);
-      const data = await response.json();
-      setBancosConectados(data);
-    } catch (error) {
-      console.error("Erro ao carregar os bancos:", error);
-    } finally {
-      setIsLoading(false);
+  // Pega o ID do utilizador assim que a página carrega
+  useEffect(() => {
+    const id = localStorage.getItem("finai_userId");
+    setUserId(id);
+    if (id) {
+      carregarBancos(id);
+    } else {
+      setLoadingBancos(false);
     }
-  };
+  }, []);
 
-  // 3. FUNÇÃO PARA ELIMINAR O BANCO
-  const handleDeletarBanco = async (conexaoId: string, nomeBanco: string) => {
-    // Confirmação de segurança nativa do navegador
-    const confirmacao = window.confirm(`Tem a certeza que deseja desconectar o ${nomeBanco}?`);
-    
-    if (!confirmacao) return; // Se a pessoa clicar em "Cancelar", não faz nada.
-
+  // 1. BUSCAR BANCOS REAIS DO PRISMA
+  const carregarBancos = async (idUsuario: string) => {
+    setLoadingBancos(true);
     try {
-      const response = await fetch(`http://localhost:3000/api/bancos/${conexaoId}`, {
-        method: "DELETE",
-      });
-
-      if (response.ok) {
-        alert("Banco removido com sucesso!");
-        
-        // Recarrega a lista para o cartão sumir da tela instantaneamente
-        const userId = localStorage.getItem("finai_userId");
-        if (userId) carregarBancos(userId);
-      } else {
-        alert("Erro ao tentar remover o banco.");
+      const res = await fetch(`http://localhost:3333/api/bancos/usuario/${idUsuario}`);
+      if (res.ok) {
+        const data = await res.json();
+        setBancos(data);
       }
     } catch (error) {
-      console.error("Erro ao apagar banco:", error);
+      console.error("Erro ao carregar bancos", error);
+    }
+    setLoadingBancos(false);
+  };
+
+  // 2. GERAR TOKEN REAL DA PLUGGY
+  const handleConectarBanco = async () => {
+    try {
+      const response = await fetch("http://localhost:3333/api/pluggy/token");
+      const data = await response.json();
+      
+      if (data.accessToken) {
+        setConnectToken(data.accessToken);
+        setIsPluggyOpen(true);
+      } else {
+        alert("Erro ao gerar token da Pluggy.");
+      }
+    } catch (error) {
       alert("Falha de comunicação com o servidor.");
     }
   };
 
-  useEffect(() => {
-    setIsMounted(true);
-    const userId = localStorage.getItem("finai_userId");
-
-    if (userId) {
-      setIsLoggedIn(true);
-      carregarBancos(userId); // 👈 Chama a função assim que a página abre!
-    }
-  }, []);
-
-  // 1. CHAMA O NODE.JS PARA PEGAR A CHAVE DE ACESSO DA PLUGGY
-  const handleAbrirPluggy = async () => {
-    try {
-      // ⚠️ Ajuste essa URL para a sua rota exata que gera o token da Pluggy no backend!
-      const response = await fetch("http://localhost:3000/api/token"); 
-      const data = await response.json();
-      
-      setConnectToken(data.accessToken); // ou data.token, dependendo de como você fez no Node
-      setIsPluggyOpen(true);
-    } catch (error) {
-      alert("Erro ao iniciar conexão segura com o banco.");
-    }
-  };
-
-  // 2. QUANDO O USUÁRIO DIGITA A SENHA DO ITAÚ/NUBANK COM SUCESSO
+  // 3. SALVAR O BANCO NOVO NO PRISMA APÓS CONECTAR
   const handlePluggySuccess = async (itemData: any) => {
-    console.log("Sucesso na Pluggy!", itemData);
-    
-    const userId = localStorage.getItem("finai_userId");
-    const pluggyItemId = itemData.item.id;
-    const nomeDoBanco = itemData.item.connector.name; // Pega o nome real do banco
+    setIsPluggyOpen(false);
+    if (!userId) return;
 
     try {
-      // Envia os dados para salvar no PostgreSQL
-      await fetch("http://localhost:3000/api/bancos/conectar", {
+      await fetch("http://localhost:3333/api/bancos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          usuarioId: userId,
-          pluggyItemId: pluggyItemId,
-          banco: nomeDoBanco
-        }),
+          pluggyItemId: itemData.item.id,
+          banco: itemData.item.connector.name,
+          usuarioId: userId
+        })
       });
-      alert(`A conta do ${nomeDoBanco} foi conectada com sucesso!`);
-      setIsPluggyOpen(false); // Fecha a janelinha
-
-      if (userId) {
-        carregarBancos(userId); 
-      }
-      
+      carregarBancos(userId); // Recarrega a grelha
     } catch (error) {
-      alert("Erro ao salvar o banco no sistema.");
+      alert("Erro ao guardar o banco no sistema.");
     }
   };
 
-  if (!isMounted) return null;
-
-  if (!isLoggedIn) {
-    // ... (Visual do cadeado continua igualzinho) ...
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[70vh]">
-        <div className="bg-white p-10 rounded-3xl shadow-sm border border-gray-100 max-w-md w-full text-center">
-          <div className="text-6xl mb-6">🔒</div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Acesso Restrito</h2>
-          <Link href="/login" className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-full transition-colors inline-block w-full">
-            Fazer Login Agora
-          </Link>
-        </div>
-      </div>
-    );
-  }
+  // 4. APAGAR BANCO EM CASCATA
+  const handleDelete = async (bancoId: string) => {
+    if (!confirm("Tem a certeza que deseja remover este banco e todas as suas transações?")) return;
+    
+    setIsDeleting(bancoId);
+    try {
+      const res = await fetch(`http://localhost:3333/api/bancos/${bancoId}`, { method: "DELETE" });
+      if (res.ok) {
+        setBancos(bancos.filter(b => b.id !== bancoId));
+      }
+    } catch (error) {
+      alert("Erro ao remover banco.");
+    }
+    setIsDeleting(null);
+  };
 
   return (
-    <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 min-h-[70vh] relative">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
+    <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 ease-out fill-mode-both relative">
+      
+      <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Meus Bancos</h1>
-          <p className="text-gray-500 mt-1">Gerencie suas contas conectadas.</p>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white mb-1">
+            Conexões Bancárias
+          </h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Gerencie as suas contas ligadas via Open Finance de forma segura.
+          </p>
         </div>
-        
-        {/* BOTÃO QUE INICIA A MÁGICA */}
-        <button 
-          onClick={handleAbrirPluggy}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-xl transition-all shadow-sm flex items-center gap-2 cursor-pointer"
-        >
-          <span>+</span> Conectar Nova Conta
+        <button onClick={handleConectarBanco} className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-xl text-sm font-medium shadow-lg shadow-blue-600/20 transition-all group cursor-pointer">
+          <Plus className="w-4 h-4 group-hover:rotate-90 transition-transform duration-300" />
+          Conectar Novo Banco
         </button>
       </div>
 
-      {/* WIDGET DA PLUGGY (Só aparece se tiver o token e estiver aberto) */}
-      {isPluggyOpen && connectToken && (
-        <div className="absolute top-0 left-0 w-full h-full z-50 bg-white/90 rounded-2xl flex items-center justify-center">
-          <PluggyConnect
-            connectToken={connectToken}
-            includeSandbox={true}
-            onSuccess={handlePluggySuccess}
-            onError={(error) => console.error("Erro na Pluggy:", error)}
-            onClose={() => setIsPluggyOpen(false)}
-          />
-        </div>
-      )}
-
-      {/* ÁREA DA LISTA DE BANCOS */}
-      {isLoading ? (
-        <div className="border-2 border-dashed border-gray-200 rounded-2xl p-12 text-center flex flex-col items-center justify-center min-h-75">
-          <Loader2 className="animate-spin w-12 h-12 text-blue-600 mb-4" />
-          <h3 className="text-lg font-bold text-gray-900 mb-2">Buscando bancos cadastrados...</h3>
-          <p className="text-gray-500 max-w-sm">
-            Aguarde um momento enquanto conectamos com segurança ao seu banco de dados.
-          </p>
-        </div>
-      ) : bancosConectados.length === 0 && !isPluggyOpen ? (
-        <div className="border-2 border-dashed border-gray-200 rounded-2xl p-12 text-center flex flex-col items-center justify-center">
-          {}
-          <div className="text-5xl mb-4 grayscale opacity-50">🏦</div>
-          <h3 className="text-lg font-bold text-gray-900 mb-2">Nenhum banco conectado</h3>
-          <p className="text-gray-500 max-w-sm">Conecte sua primeira conta bancária.</p>
+      {loadingBancos ? (
+        <div className="flex justify-center items-center h-40">
+          <RefreshCw className="w-8 h-8 text-blue-500 animate-spin" />
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {bancosConectados.map((conexao: any) => (
-            <div key={conexao.id} className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden">
-              {/* Detalhe de cor no topo do cartão */}
-              <div className="absolute top-0 left-0 w-full h-1 bg-blue-500"></div>
-              
-              <div className="flex items-center gap-4 mb-4">
-                <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center text-xl shadow-inner">
-                  🏛️
-                </div>
-                <div>
-                  <h3 className="font-bold text-gray-900 text-lg">{conexao.banco}</h3>
-                  <p className="text-xs text-green-600 font-medium bg-green-50 px-2 py-1 rounded-md inline-block mt-1">
-                    Sincronizado
-                  </p>
-                </div>
-              </div>
-              
-              <div className="pt-4 border-t border-gray-50 flex justify-between items-center">
-                <p className="text-xs text-gray-400">
-                  Adicionado em: {new Date(conexao.criadoEm).toLocaleDateString('pt-BR')}
-                </p>
-                <button 
-                onClick={() => handleDeletarBanco(conexao.id, conexao.banco)}
-                className="text-gray-400 hover:text-red-500 transition-colors cursor-pointer" title="Desconectar">
-                  🗑️
+          {bancos.map((bank) => {
+            const estilo = getEstiloBanco(bank.banco);
+            return (
+              <div key={bank.id} className={`group relative bg-white/80 dark:bg-[#0F172A]/80 backdrop-blur-xl border border-slate-200/50 dark:border-slate-800/50 p-6 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.02)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.1)] transition-all duration-300 ${isDeleting === bank.id ? 'opacity-50 scale-95' : 'hover:shadow-lg hover:-translate-y-1'}`}>
+                <button onClick={() => handleDelete(bank.id)} disabled={isDeleting === bank.id} className="absolute top-4 right-4 p-2 rounded-xl text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10 dark:hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all disabled:opacity-0 cursor-pointer">
+                  <Trash2 className="w-5 h-5" />
                 </button>
+                <div className="flex items-center gap-4 mb-5">
+                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-inner ${estilo.bg}`}>
+                    <Building2 className={`w-7 h-7 ${estilo.text}`} />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">{bank.banco}</h3>
+                    <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Conta Sincronizada</p>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800/50 pt-4 mt-2">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                    <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">Ativo e Seguro</span>
+                  </div>
+                </div>
               </div>
+            );
+          })}
+
+          {/* Cartão "Adicionar Novo" */}
+          <button onClick={handleConectarBanco} className="flex flex-col items-center justify-center gap-3 bg-slate-50/50 dark:bg-slate-900/30 border-2 border-dashed border-slate-200 dark:border-slate-800 hover:border-blue-500/50 hover:bg-blue-50/50 dark:hover:bg-blue-900/10 p-6 rounded-3xl transition-all group min-h-40 cursor-pointer">
+            <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center group-hover:bg-blue-100 dark:group-hover:bg-blue-900/30 transition-colors">
+              <Plus className="w-6 h-6 text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-500 transition-colors" />
             </div>
-          ))}
+            <span className="text-sm font-semibold text-slate-500 dark:text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400">Adicionar nova conta</span>
+          </button>
+        </div>
+      )}
+
+      {isPluggyOpen && connectToken && (
+        <div className="fixed inset-0 z-100 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="w-full max-w-md h-150 bg-white rounded-3xl overflow-hidden shadow-2xl relative animate-in zoom-in-95 duration-300">
+             <PluggyConnect connectToken={connectToken} includeSandbox={false} onSuccess={handlePluggySuccess} onError={(error: any) => console.error(error)} onClose={() => setIsPluggyOpen(false)} />
+          </div>
         </div>
       )}
     </div>

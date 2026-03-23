@@ -1,188 +1,225 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import { Loader2 } from "lucide-react";
-import { useTheme } from "next-themes"; 
+import { useState, useEffect } from "react";
+import { RefreshCw, Filter, Calendar } from "lucide-react";
+import { SummaryCards } from "../../components/SummaryCards";
+import { ExpenseChart } from "../../components/ExpenseChart";
+import { AiInsights } from "../../components/AiInsights";
 
-const CORES = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#6366f1'];
+const CORES_GRAFICO = ["#f43f5e", "#0ea5e9", "#10b981", "#8b5cf6", "#f59e0b", "#06b6d4", "#ec4899", "#64748b"];
+
+// Gera as opções referentes aos últimos 6 meses para utilização no filtro de insights da IA
+const gerarUltimosMeses = () => {
+  const meses = [];
+  const hoje = new Date();
+  for (let i = 0; i < 6; i++) {
+    const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
+    const mesStr = String(d.getMonth() + 1).padStart(2, '0');
+    const anoStr = d.getFullYear();
+    const label = d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+    meses.push({ value: `${anoStr}-${mesStr}`, label: label.charAt(0).toUpperCase() + label.slice(1) });
+  }
+  return meses;
+};
+
+// Converte uma string no formato mês/ano (ex: "2026-03") em datas exatas de início e fim do período
+const obterDatasDoMes = (mesAnoStr: string) => {
+  const [ano, mes] = mesAnoStr.split('-');
+  const inicio = new Date(Number(ano), Number(mes) - 1, 1).toISOString();
+  const fim = new Date(Number(ano), Number(mes), 0, 23, 59, 59).toISOString();
+  return { dataInicio: inicio, dataFim: fim };
+};
 
 export default function DashboardPage() {
-  const [isMounted, setIsMounted] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [nome, setNome] = useState("");
-  const { theme } = useTheme();
-
-  const [isLoading, setIsLoading] = useState(false);
-  const [isFirstLoad, setIsFirstLoad] = useState(true); 
+  const [userId, setUserId] = useState<string | null>(null);
   
-  const [dataInicio, setDataInicio] = useState(() => {
-    const hoje = new Date();
-    return new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().split('T')[0];
-  });
-  
-  const [dataFim, setDataFim] = useState(() => {
-    const hoje = new Date();
-    return new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).toISOString().split('T')[0];
-  });
+  // Define o primeiro e o último dia do mês atual como o padrão inicial para os filtros do dashboard principal
+  const hoje = new Date();
+  const primeiroDia = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().split('T')[0];
+  const ultimoDia = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).toISOString().split('T')[0];
 
+  // Estados responsáveis pelo controle do intervalo de datas do dashboard principal
+  const [dataInicio, setDataInicio] = useState(primeiroDia);
+  const [dataFim, setDataFim] = useState(ultimoDia);
+
+  // Estado independente para o filtro de mês da IA, evitando conflitos com o intervalo de datas global
+  const opcoesMeses = gerarUltimosMeses();
+  const [filtroIA, setFiltroIA] = useState(opcoesMeses[0].value);
+
+  // Estados para o gerenciamento de carregamento e o armazenamento das respostas da API
+  const [loadingSync, setLoadingSync] = useState(false);
+  const [loadingDados, setLoadingDados] = useState(true);
+  const [loadingInsight, setLoadingInsight] = useState(true);
+  
   const [resumo, setResumo] = useState({ entradas: 0, saidas: 0, saldo: 0, grafico: [] });
+  const [insight, setInsight] = useState<any>(null);
 
-  const carregarDashboard = async (userId: string, inicio: string, fim: string) => {
-    setIsLoading(true);
-    try {
-      const inicioISO = new Date(`${inicio}T00:00:00`).toISOString();
-      const fimISO = new Date(`${fim}T23:59:59`).toISOString();
-
-      const url = `http://localhost:3000/api/dashboard/${userId}?dataInicio=${inicioISO}&dataFim=${fimISO}`;
-
-      const response = await fetch(url);
-      if (response.ok) {
-        const data = await response.json();
-        setResumo(data);
-      }
-    } catch (error) {
-      console.error("Erro ao carregar os dados:", error);
-    } finally {
-        setIsLoading(false);
-        setIsFirstLoad(false);
-    }
-  };
-
+  // Recupera o ID do usuário local e dispara as chamadas iniciais de dados assim que o componente é montado
   useEffect(() => {
-    setIsMounted(true);
-    const userId = localStorage.getItem("finai_userId");
-    const userName = localStorage.getItem("finai_userName");
-
-    if (userId) {
-      setIsLoggedIn(true);
-      setNome(userName || "Usuário");
-      
-      if (dataInicio && dataFim) {
-        carregarDashboard(userId, dataInicio, dataFim);
-      }
+    const id = localStorage.getItem("finai_userId");
+    setUserId(id);
+    if (id) {
+      carregarDashboard(id, dataInicio, dataFim);
+      carregarInsight(id, filtroIA);
     }
+  }, []);
+
+  // Observa os filtros de data globais e recarrega os indicadores do dashboard em caso de alteração
+  useEffect(() => {
+    if (userId) carregarDashboard(userId, dataInicio, dataFim);
   }, [dataInicio, dataFim]);
 
-  const formatarMoeda = (valor: number) => {
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
+  // Atualiza os insights do assistente virtual (via cache ou nova chamada) quando o mês selecionado muda
+  useEffect(() => {
+    if (userId) carregarInsight(userId, filtroIA);
+  }, [filtroIA]);
+
+  // Consulta o resumo financeiro com base nas datas informadas e preenche as informações do gráfico de gastos
+  const carregarDashboard = async (id: string, inicio: string, fim: string) => {
+    setLoadingDados(true);
+    try {
+      // Inclui o horário limite nas strings de data para assegurar a cobertura integral dos dias no fuso local
+      const startIso = new Date(`${inicio}T00:00:00`).toISOString();
+      const endIso = new Date(`${fim}T23:59:59`).toISOString();
+      
+      const res = await fetch(`http://localhost:3333/api/dashboard/${id}?dataInicio=${startIso}&dataFim=${endIso}`);
+      if (res.ok) {
+        const data = await res.json();
+        const graficoComCores = data.grafico.map((item: any, index: number) => ({
+          ...item, color: CORES_GRAFICO[index % CORES_GRAFICO.length]
+        }));
+        setResumo({ ...data, grafico: graficoComCores });
+      }
+    } catch (error) {
+      console.error(error);
+    }
+    setLoadingDados(false);
   };
 
-  if (!isMounted) return null;
+  // Obtém os insights de IA, utilizando armazenamento em cache no localStorage para otimizar requisições
+  const carregarInsight = async (id: string, mesParam: string) => {
+    const cacheKey = `finai_insight_${id}_${mesParam}`;
+    const insightSalvo = localStorage.getItem(cacheKey);
 
-  if (!isLoggedIn) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[70vh]">
-        <div className="bg-white dark:bg-gray-900 p-10 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-800 max-w-md w-full text-center">
-          <div className="text-6xl mb-6">🔒</div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Acesso Restrito</h2>
-          <Link href="/login" className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-full transition-colors inline-block w-full">Fazer Login Agora</Link>
-        </div>
-      </div>
-    );
-  }
+    if (insightSalvo) {
+      setInsight(JSON.parse(insightSalvo));
+      setLoadingInsight(false);
+      return;
+    }
 
-  const gastouMaisQueGanhou = resumo.saidas > resumo.entradas;
+    setLoadingInsight(true);
+    try {
+      const { dataInicio, dataFim } = obterDatasDoMes(mesParam);
+      const res = await fetch(`http://localhost:3333/api/insights/${id}?dataInicio=${dataInicio}&dataFim=${dataFim}`);
+      if (res.ok) {
+        const data = await res.json();
+        localStorage.setItem(cacheKey, JSON.stringify(data)); 
+        setInsight(data);
+      }
+    } catch (error) {
+      console.error(error);
+    }
+    setLoadingInsight(false);
+  };
+
+  // Executa o fluxo de sincronização bancária, disparando o webhook de atualização e revalidando os caches
+  const handleSincronizar = async () => {
+    if (!userId) return;
+    setLoadingSync(true);
+    try {
+      const resBancos = await fetch(`http://localhost:3333/api/bancos/usuario/${userId}`);
+      const bancos = await resBancos.json();
+
+      if (bancos.length === 0) {
+        alert("Não tem bancos conectados.");
+        setLoadingSync(false);
+        return;
+      }
+
+      const { dataInicio: inicioIA, dataFim: fimIA } = obterDatasDoMes(filtroIA);
+      const resAntes = await fetch(`http://localhost:3333/api/dashboard/${userId}?dataInicio=${inicioIA}&dataFim=${fimIA}`);
+      const dadosAntes = await resAntes.json();
+      const volumeAntes = dadosAntes.entradas + dadosAntes.saidas; // Utiliza a soma total das operações como um hash de verificação
+
+      for (const banco of bancos) {
+        await fetch("http://localhost:3333/api/transacoes/sincronizar", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ conexaoId: banco.id })
+        });
+      }
+
+      const resDepois = await fetch(`http://localhost:3333/api/dashboard/${userId}?dataInicio=${inicioIA}&dataFim=${fimIA}`);
+      const dadosDepois = await resDepois.json();
+      const volumeDepois = dadosDepois.entradas + dadosDepois.saidas;
+
+      if (volumeAntes !== volumeDepois) {
+        console.log("💰 Novas movimentações detectadas! Apagando cache e chamando o Consultor IA...");
+        localStorage.removeItem(`finai_insight_${userId}_${filtroIA}`);
+      } else {
+        console.log("🛡️ Nenhuma transação nova neste mês. Cache mantido, tokens poupados!");
+      }
+      
+      await carregarDashboard(userId, dataInicio, dataFim);
+      await carregarInsight(userId, filtroIA); 
+      
+    } catch (error) {
+      alert("Houve um problema ao sincronizar.");
+    }
+    setLoadingSync(false);
+  };
 
   return (
-    <div className="space-y-6">
-      <div className="bg-white dark:bg-gray-900 p-8 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+    <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 ease-out fill-mode-both">
+      
+      {/* Renderiza a seção superior contendo o título da página e o botão de sincronização manual */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Resumo Financeiro 🚀</h1>
-          <p className="text-gray-500 dark:text-gray-400 mt-1">Aqui está a análise da IA sobre o seu dinheiro.</p>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white mb-1">Visão Geral</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Análise refinada com Inteligência Artificial.</p>
+        </div>
+        <button onClick={handleSincronizar} disabled={loadingSync} className="flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-xl text-sm font-medium shadow-lg shadow-blue-600/20 transition-all group disabled:opacity-70 w-full md:w-auto cursor-pointer">
+          <RefreshCw className={`w-4 h-4 ${loadingSync ? "animate-spin" : "group-hover:rotate-180 transition-transform duration-500"}`} />
+          {loadingSync ? "A Atualizar..." : "Sincronizar Bancos"}
+        </button>
+      </div>
+
+      {/* Componente contendo os campos de inputs de data para a filtragem geral do período de análise */}
+      <div className="bg-white/80 dark:bg-[#0F172A]/80 backdrop-blur-xl border border-slate-200/50 dark:border-slate-800/50 p-4 rounded-2xl shadow-sm flex flex-wrap items-center gap-4">
+        <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 font-medium text-sm mr-2">
+          <Filter className="w-4 h-4" /> Período de Análise:
         </div>
         
-        <div className="flex flex-col items-start bg-gray-50 dark:bg-gray-800/50 p-3 rounded-xl border border-gray-200 dark:border-gray-700/50">
-          <label className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider">Período de Análise</label>
-          <div className="flex flex-wrap sm:flex-nowrap items-center gap-3 w-full">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 transition-colors focus-within:border-blue-500/50 focus-within:ring-1 focus-within:ring-blue-500/50">
+            <Calendar className="w-4 h-4 text-slate-400" />
             <input 
               type="date" 
-              value={dataInicio}
-              onChange={(e) => setDataInicio(e.target.value)}
-              className="bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 py-2 px-3 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-auto"
+              value={dataInicio} 
+              onChange={(e) => setDataInicio(e.target.value)} 
+              className="bg-transparent text-sm font-semibold text-slate-700 dark:text-slate-200 outline-none cursor-pointer scheme-light dark:scheme-dark"
             />
-            <span className="text-gray-400 font-medium">até</span>
+            <span className="text-slate-400 font-medium px-1">-</span>
             <input 
               type="date" 
-              value={dataFim}
-              onChange={(e) => setDataFim(e.target.value)}
-              max={new Date().toISOString().split('T')[0]} 
-              className="bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 py-2 px-3 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-auto"
+              value={dataFim} 
+              onChange={(e) => setDataFim(e.target.value)} 
+              className="bg-transparent text-sm font-semibold text-slate-700 dark:text-slate-200 outline-none cursor-pointer scheme-light dark:scheme-dark"
             />
           </div>
         </div>
       </div>
 
-      {isFirstLoad ? (
-        <div className="bg-white dark:bg-gray-900 p-12 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 text-center flex flex-col items-center justify-center max-h-60">
-          <Loader2 className="animate-spin w-12 h-12 text-blue-600 mb-4" />
-          <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Calculando resumo financeiro...</h3>
-          <p className="text-gray-500 dark:text-gray-400 max-w-sm">
-            Aguarde enquanto a nossa Inteligência Artificial analisa as suas entradas e saídas.
-          </p>
-        </div>
+      {loadingDados ? (
+        <div className="flex h-64 items-center justify-center"><RefreshCw className="w-8 h-8 text-blue-500 animate-spin" /></div>
       ) : (
-      <div className={`grid grid-cols-1 md:grid-cols-3 gap-6 transition-opacity ${isLoading ? 'opacity-50' : 'opacity-100'}`}>
-        
-        <div className="p-6 bg-green-50 dark:bg-green-900/20 rounded-xl border border-green-100 dark:border-green-900/50">
-          <p className="text-sm text-green-600 dark:text-green-400 font-medium mb-1">Recebimentos</p>
-          <p className="text-3xl font-bold text-green-700 dark:text-green-500">{formatarMoeda(resumo.entradas)}</p>
-        </div>
-        
-        <div className="p-6 bg-red-50 dark:bg-red-900/20 rounded-xl border border-red-100 dark:border-red-900/50">
-          <p className="text-sm text-red-600 dark:text-red-400 font-medium mb-1">Pagamentos</p>
-          <p className="text-3xl font-bold text-red-700 dark:text-red-500">{formatarMoeda(resumo.saidas)}</p>
-        </div>
-        
-        <div className={`p-6 rounded-xl border ${resumo.saldo >= 0 ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-900/50' : 'bg-orange-50 dark:bg-orange-900/20 border-orange-100 dark:border-orange-900/50'}`}>
-          <p className={`text-sm font-medium mb-1 ${resumo.saldo >= 0 ? 'text-blue-600 dark:text-blue-400' : 'text-orange-600 dark:text-orange-400'}`}>Balanço do Período</p>
-          <p className={`text-3xl font-bold ${resumo.saldo >= 0 ? 'text-blue-700 dark:text-blue-500' : 'text-orange-700 dark:text-orange-500'}`}>{formatarMoeda(resumo.saldo)}</p>
-        </div>
-      </div>
-      )}
-
-      {(resumo.entradas > 0 || resumo.saidas > 0) && (
-        <div className={`p-4 rounded-xl border font-medium text-center ${gastouMaisQueGanhou ? 'bg-red-50 dark:bg-red-900/20 border-red-100 dark:border-red-900/50 text-red-600 dark:text-red-400' : 'bg-green-50 dark:bg-green-900/20 border-green-100 dark:border-green-900/50 text-green-600 dark:text-green-400'}`}>
-          {gastouMaisQueGanhou 
-            ? "⚠️ Atenção: As suas despesas ultrapassaram os seus recebimentos neste período selecionado." 
-            : "✅ Parabéns! Gastou menos do que recebeu neste período."}
-        </div>
-      )}
-
-      {/* ÁREA DO GRÁFICO */}
-      <div className="bg-white dark:bg-gray-900 p-8 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800">
-        <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-6">Despesas por Categoria</h2>
-        {resumo.grafico.length > 0 ? (
-          <div className="h-80 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={resumo.grafico} cx="50%" cy="50%" innerRadius={80} outerRadius={120} paddingAngle={5} dataKey="value" stroke={theme === "dark" ? "#111827" : "#fff"}>
-                  {resumo.grafico.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={CORES[index % CORES.length]} />
-                  ))}
-                </Pie>
-                <Tooltip 
-                  formatter={(value: any) => formatarMoeda(Number(value))} 
-                  contentStyle={{ 
-                    borderRadius: '10px', 
-                    border: '1px solid',
-                    borderColor: theme === "dark" ? '#374151' : '#f3f4f6',
-                    backgroundColor: theme === "dark" ? '#1f2937' : '#ffffff',
-                    color: theme === "dark" ? '#f9fafb' : '#111827',
-                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' 
-                  }} 
-                />
-                <Legend wrapperStyle={{ color: theme === "dark" ? '#d1d5db' : '#374151' }} />
-              </PieChart>
-            </ResponsiveContainer>
+        <>
+          <SummaryCards resumo={resumo} />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <ExpenseChart resumo={resumo} />
+            <AiInsights insight={insight} loadingInsight={loadingInsight} filtroIA={filtroIA} setFiltroIA={setFiltroIA} opcoesMeses={opcoesMeses} />
           </div>
-        ) : (
-          <div className="h-64 flex items-center justify-center text-gray-400 dark:text-gray-500 border-2 border-dashed border-gray-100 dark:border-gray-800 rounded-xl">
-            Nenhum dado de despesa para este período.
-          </div>
-        )}
-      </div>
+        </>
+      )}
     </div>
   );
 }
