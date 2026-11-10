@@ -1,30 +1,30 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Search, Filter, Utensils, Car, ShoppingCart, Tv, Coffee, Briefcase, Landmark, Activity, RefreshCw } from "lucide-react";
+import { Search, SlidersHorizontal, Utensils, Car, ShoppingCart, Tv, Coffee, Briefcase, Landmark, RefreshCw } from "lucide-react";
 
 const getEstiloCategoria = (categoria: string) => {
   const cat = categoria.toLowerCase();
-  if (cat.includes("alimentação") || cat.includes("restaurante")) return { icon: Utensils, corIcon: "text-rose-500", bgIcon: "bg-rose-500/10" };
-  if (cat.includes("transporte") || cat.includes("uber")) return { icon: Car, corIcon: "text-sky-500", bgIcon: "bg-sky-500/10" };
-  if (cat.includes("supermercado") || cat.includes("mercado")) return { icon: ShoppingCart, corIcon: "text-emerald-500", bgIcon: "bg-emerald-500/10" };
-  if (cat.includes("assinatura")) return { icon: Tv, corIcon: "text-violet-500", bgIcon: "bg-violet-500/10" };
-  if (cat.includes("salário") || cat.includes("recebimento")) return { icon: Briefcase, corIcon: "text-emerald-500", bgIcon: "bg-emerald-500/10" };
-  if (cat.includes("lazer")) return { icon: Coffee, corIcon: "text-amber-500", bgIcon: "bg-amber-500/10" };
-  return { icon: Landmark, corIcon: "text-slate-500", bgIcon: "bg-slate-500/10" };
+  if (cat.includes("alimentação") || cat.includes("restaurante")) return { icon: Utensils, corIcon: "text-[#b24a35] dark:text-[#f0947f]", bgIcon: "bg-[#d9674e]/15" };
+  if (cat.includes("transporte") || cat.includes("uber")) return { icon: Car, corIcon: "text-[#356b88] dark:text-[#8cc1dc]", bgIcon: "bg-[#4e8fb0]/15" };
+  if (cat.includes("supermercado") || cat.includes("mercado")) return { icon: ShoppingCart, corIcon: "text-pos", bgIcon: "bg-lime/35" };
+  if (cat.includes("assinatura")) return { icon: Tv, corIcon: "text-[#8a6114] dark:text-[#f0c26a]", bgIcon: "bg-[#e0a43a]/20" };
+  if (cat.includes("salário") || cat.includes("recebimento")) return { icon: Briefcase, corIcon: "text-pos", bgIcon: "bg-lime/35" };
+  if (cat.includes("lazer")) return { icon: Coffee, corIcon: "text-[#8a6114] dark:text-[#f0c26a]", bgIcon: "bg-[#e0a43a]/20" };
+  return { icon: Landmark, corIcon: "text-mute", bgIcon: "bg-surface-2" };
 };
 
 const getCorTag = (tipo: string) => {
   const t = tipo.toLowerCase();
-  if (t.includes("pix")) return "bg-teal-100 text-teal-700 dark:bg-teal-500/10 dark:text-teal-400";
-  if (t.includes("crédito")) return "bg-purple-100 text-purple-700 dark:bg-purple-500/10 dark:text-purple-400";
-  return "bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400"; 
+  if (t.includes("pix")) return "bg-lime/40 text-on-lime dark:bg-lime/15 dark:text-lime";
+  if (t.includes("crédito")) return "bg-[#e0a43a]/20 text-[#7a5410] dark:text-[#f0c26a]";
+  return "bg-surface-2 text-mute";
 };
 
 export default function TransacoesPage() {
   const [transacoes, setTransacoes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  
+
   // Define os estados utilizados para o controle das variáveis de filtragem
   const [pesquisa, setPesquisa] = useState("");
   const [filtroCategoria, setFiltroCategoria] = useState("Todas");
@@ -61,54 +61,50 @@ export default function TransacoesPage() {
     return matchPesquisa && matchCategoria && matchTipo;
   });
 
+  const selectClass = "w-full px-4 h-11 bg-surface-2 rounded-full text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary/40";
+
   return (
-    <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 ease-out fill-mode-both">
-      
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+    <div className="space-y-4 sm:space-y-5">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 pt-2">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white mb-1">Transações</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">Histórico completo refinado pela IA (Groq).</p>
+          <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight mb-1">Transações</h1>
+          <p className="text-mute">Histórico completo, com nomes e categorias limpos pela IA.</p>
         </div>
-        <div className="flex items-center gap-3">
-          <button 
-            onClick={() => setMostrarFiltros(!mostrarFiltros)}
-            className={`flex items-center gap-2 px-4 py-2.5 border rounded-xl text-sm font-medium transition-all shadow-sm ${mostrarFiltros ? 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-900/20 dark:border-blue-800 dark:text-blue-400' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700'} cursor-pointer`}
-          >
-            <Filter className="w-4 h-4" /> Filtros
-          </button>
-        </div>
+        <button
+          onClick={() => setMostrarFiltros(!mostrarFiltros)}
+          aria-expanded={mostrarFiltros}
+          className={`self-start sm:self-auto flex items-center gap-2 h-11 px-5 rounded-full text-sm font-semibold transition-colors ${mostrarFiltros ? "bg-lime text-on-lime" : "bg-surface hover:bg-surface-2"}`}
+        >
+          <SlidersHorizontal className="w-4 h-4" /> Filtros
+        </button>
       </div>
 
-      <div className="bg-white/80 dark:bg-[#0F172A]/80 backdrop-blur-xl border border-slate-200/50 dark:border-slate-800/50 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.02)] overflow-hidden">
-        
-        {/* Seção contendo a barra de pesquisa em texto e os menus suspensos de filtro */}
-        <div className="p-4 border-b border-slate-200/50 dark:border-slate-800/50 bg-slate-50/50 dark:bg-slate-900/50 space-y-4">
+      <div className="bg-surface rounded-[28px] overflow-hidden">
+        {/* Barra de pesquisa e filtros */}
+        <div className="p-4 sm:p-5 border-b border-line space-y-4">
           <div className="relative w-full">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input 
-              type="text" placeholder="Pesquisar loja ou categoria..." 
-              value={pesquisa} onChange={(e) => setPesquisa(e.target.value)}
-              className="w-full pl-9 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all shadow-sm"
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-mute" />
+            <input
+              type="search"
+              placeholder="Pesquisar loja ou categoria"
+              aria-label="Pesquisar transações"
+              value={pesquisa}
+              onChange={(e) => setPesquisa(e.target.value)}
+              className="w-full pl-10 pr-4 h-11 bg-surface-2 rounded-full text-sm placeholder:text-mute outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             />
           </div>
 
           {mostrarFiltros && (
-            <div className="flex flex-col sm:flex-row gap-4 pt-2 animate-in slide-in-from-top-2 duration-300">
+            <div className="flex flex-col sm:flex-row gap-4">
               <div className="flex-1 space-y-1.5">
-                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 ml-1">Categoria</label>
-                <select 
-                  value={filtroCategoria} onChange={(e) => setFiltroCategoria(e.target.value)}
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50 cursor-pointer"
-                >
+                <label htmlFor="f-cat" className="text-sm text-mute ml-1">Categoria</label>
+                <select id="f-cat" value={filtroCategoria} onChange={(e) => setFiltroCategoria(e.target.value)} className={selectClass}>
                   {categoriasUnicas.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                 </select>
               </div>
               <div className="flex-1 space-y-1.5">
-                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 ml-1">Método de Pagamento</label>
-                <select 
-                  value={filtroTipo} onChange={(e) => setFiltroTipo(e.target.value)}
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50 cursor-pointer"
-                >
+                <label htmlFor="f-tipo" className="text-sm text-mute ml-1">Método de pagamento</label>
+                <select id="f-tipo" value={filtroTipo} onChange={(e) => setFiltroTipo(e.target.value)} className={selectClass}>
                   {tiposUnicos.map(tipo => <option key={tipo} value={tipo}>{tipo}</option>)}
                 </select>
               </div>
@@ -116,23 +112,23 @@ export default function TransacoesPage() {
           )}
         </div>
 
-        {/* Componente de tabela que renderiza a listagem final das transações já filtradas */}
-        <div className="w-full overflow-x-auto min-h-100">
+        {/* Tabela das transações filtradas; colunas secundárias somem em telas pequenas */}
+        <div className="w-full overflow-x-auto min-h-80">
           {loading ? (
-            <div className="flex h-full items-center justify-center mt-20"><RefreshCw className="w-8 h-8 text-blue-500 animate-spin" /></div>
+            <div className="flex items-center justify-center pt-20"><RefreshCw className="w-7 h-7 text-mute animate-spin" /></div>
           ) : transacoesFiltradas.length === 0 ? (
-            <div className="flex flex-col items-center justify-center mt-20 text-slate-400">
-               <Activity className="w-12 h-12 mb-3 opacity-50" />
-               <p className="text-lg font-medium">Nenhuma transação encontrada.</p>
+            <div className="flex flex-col items-center justify-center pt-20 text-center px-6">
+              <p className="text-lg font-medium">Nenhuma transação encontrada</p>
+              <p className="text-sm text-mute mt-1">Ajuste a pesquisa ou os filtros, ou sincronize os bancos no painel.</p>
             </div>
           ) : (
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-slate-200/50 dark:border-slate-800/50 bg-slate-50/50 dark:bg-slate-900/50 text-xs uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400">
-                  <th className="py-4 px-6 font-semibold">Detalhes</th>
-                  <th className="py-4 px-6 font-semibold">Estabelecimento (IA)</th>
-                  <th className="py-4 px-6 font-semibold">Tipo</th>
-                  <th className="py-4 px-6 font-semibold text-right">Valor</th>
+                <tr className="border-b border-line text-sm text-mute">
+                  <th className="py-3 px-4 sm:px-6 font-medium">Categoria</th>
+                  <th className="py-3 px-6 font-medium hidden md:table-cell">Estabelecimento</th>
+                  <th className="py-3 px-6 font-medium hidden sm:table-cell">Tipo</th>
+                  <th className="py-3 px-4 sm:px-6 font-medium text-right">Valor</th>
                 </tr>
               </thead>
               <tbody>
@@ -140,31 +136,32 @@ export default function TransacoesPage() {
                   const estilo = getEstiloCategoria(tx.categoria);
                   const Icon = estilo.icon;
                   const isGain = tx.valor > 0;
-                  const dataFormatada = new Date(tx.dataOcorrencia).toLocaleDateString('pt-BR');
-                  
+                  const dataFormatada = new Date(tx.dataOcorrencia).toLocaleDateString("pt-BR");
+
                   return (
-                    <tr key={tx.id} className="border-b border-slate-100 dark:border-slate-800/30 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
-                      <td className="py-4 px-6 align-middle">
+                    <tr key={tx.id} className="border-b border-line last:border-0 hover:bg-surface-2/60 transition-colors">
+                      <td className="py-3.5 px-4 sm:px-6 align-middle max-w-0 w-full md:max-w-none md:w-auto">
                         <div className="flex items-center gap-3">
-                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${estilo.bgIcon}`}>
+                          <div className={`w-10 h-10 shrink-0 rounded-full flex items-center justify-center ${estilo.bgIcon}`}>
                             <Icon className={`w-5 h-5 ${estilo.corIcon}`} />
                           </div>
-                          <div className="flex flex-col">
-                            <span className="text-sm font-semibold text-slate-900 dark:text-white">{tx.categoria}</span>
-                            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">{dataFormatada}</span>
+                          <div className="flex flex-col min-w-0">
+                            <span className="text-sm font-semibold truncate md:hidden">{tx.nomeLimpo}</span>
+                            <span className="text-sm text-mute md:text-ink md:font-semibold truncate">{tx.categoria}</span>
+                            <span className="text-xs text-mute">{dataFormatada}</span>
                           </div>
                         </div>
                       </td>
-                      <td className="py-4 px-6 align-middle text-sm font-medium text-slate-700 dark:text-slate-300">{tx.nomeLimpo}</td>
-                      <td className="py-4 px-6 align-middle">
+                      <td className="py-3.5 px-6 align-middle text-sm font-medium hidden md:table-cell">{tx.nomeLimpo}</td>
+                      <td className="py-3.5 px-6 align-middle hidden sm:table-cell">
                         <div className="flex flex-col items-start gap-1">
                           <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${getCorTag(tx.tipoPagamento)}`}>{tx.tipoPagamento}</span>
-                          {tx.dataFatura && <span className="text-[10px] text-slate-400 font-medium">Fatura: {new Date(tx.dataFatura).toLocaleDateString('pt-BR')}</span>}
+                          {tx.dataFatura && <span className="text-xs text-mute">Fatura: {new Date(tx.dataFatura).toLocaleDateString("pt-BR")}</span>}
                         </div>
                       </td>
-                      <td className="py-4 px-6 align-middle text-right">
-                        <span className={`text-base font-bold tracking-tight ${isGain ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-900 dark:text-white'}`}>
-                          {isGain ? '+' : '-'} {Math.abs(tx.valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      <td className="py-3.5 px-4 sm:px-6 align-middle text-right whitespace-nowrap">
+                        <span className={`text-base font-semibold ${isGain ? "text-pos" : "text-ink"}`}>
+                          {isGain ? "+" : "−"}{Math.abs(tx.valor).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
                         </span>
                       </td>
                     </tr>

@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, ArrowUpRight, AlertCircle } from "lucide-react";
+import { Sparkles, ArrowUpRight, AlertCircle, Lightbulb } from "lucide-react";
 
 interface AiInsightsProps {
   insight: any;
@@ -8,53 +8,73 @@ interface AiInsightsProps {
   filtroIA: string;
   setFiltroIA: (value: string) => void;
   opcoesMeses: Array<{ value: string; label: string }>;
+  className?: string;
 }
 
-export function AiInsights({ insight, loadingInsight, filtroIA, setFiltroIA, opcoesMeses }: AiInsightsProps) {
+export function AiInsights({ insight, loadingInsight, filtroIA, setFiltroIA, opcoesMeses, className = "" }: AiInsightsProps) {
   return (
-    <div className="bg-linear-to-br from-blue-600 to-blue-800 dark:from-blue-900 dark:to-slate-900 rounded-3xl p-6 shadow-xl relative overflow-hidden flex flex-col justify-between">
-      <div className="absolute -top-24 -right-24 w-64 h-64 bg-white/10 rounded-full blur-3xl pointer-events-none"></div>
-      <div>
-        <div className="flex items-center justify-between mb-4 relative z-10">
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 bg-white/20 rounded-lg backdrop-blur-sm"><Activity className="w-5 h-5 text-white" /></div>
-            <h3 className="text-lg font-bold tracking-tight text-white">Consultor IA</h3>
+    <section className={`bg-lime text-on-lime rounded-[28px] p-6 sm:p-7 flex flex-col gap-5 ${className}`}>
+      <div className="flex items-center justify-between gap-3">
+        <span className="inline-flex shrink-0 whitespace-nowrap items-center gap-2 bg-on-lime text-lime rounded-full pl-3 pr-4 h-9 text-sm font-semibold">
+          <Sparkles className="w-4 h-4" /> Consultor IA
+        </span>
+        <label className="sr-only" htmlFor="filtro-ia">Mês analisado</label>
+        <select
+          id="filtro-ia"
+          value={filtroIA}
+          onChange={(e) => setFiltroIA(e.target.value)}
+          className="h-9 rounded-full bg-white/45 hover:bg-white/60 px-3 text-sm font-medium text-on-lime outline-none transition-colors"
+        >
+          {opcoesMeses.map((m) => (
+            <option key={`ia-${m.value}`} value={m.value} className="text-black">{m.label}</option>
+          ))}
+        </select>
+      </div>
+
+      {loadingInsight ? (
+        <div className="space-y-3 animate-pulse" aria-label="A gerar análise">
+          <div className="h-4 bg-white/45 rounded-full w-full" />
+          <div className="h-4 bg-white/45 rounded-full w-5/6" />
+          <div className="grid grid-cols-2 gap-3 pt-3">
+            <div className="h-20 bg-white/45 rounded-2xl" />
+            <div className="h-20 bg-white/45 rounded-2xl" />
           </div>
-          
-          <select 
-            value={filtroIA} 
-            onChange={(e) => setFiltroIA(e.target.value)} 
-            className="bg-white/10 hover:bg-white/20 transition-colors text-white text-xs font-medium border border-white/20 rounded-lg px-2 py-1 outline-none cursor-pointer backdrop-blur-sm"
-          >
-            {opcoesMeses.map(m => <option key={`ia-${m.value}`} value={m.value} className="text-slate-900">{m.label}</option>)}
-          </select>
         </div>
-        
-        {loadingInsight ? (
-          <div className="space-y-3 animate-pulse mt-6">
-            <div className="h-4 bg-white/20 rounded w-full"></div>
-            <div className="h-4 bg-white/20 rounded w-5/6"></div>
-            <div className="h-4 bg-white/20 rounded w-4/6 mt-4"></div>
-          </div>
-        ) : insight ? (
-          <div className="relative z-10">
-            <p className="text-blue-50 text-sm leading-relaxed mb-5">{insight.resumo}</p>
-            <div className="space-y-3">
+      ) : insight ? (
+        <>
+          <p className="text-lg sm:text-xl font-medium leading-snug text-pretty">{insight.resumo}</p>
+
+          {(insight.destaquePositivo || insight.alerta) && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {insight.destaquePositivo && (
-                <div className="bg-emerald-500/20 backdrop-blur-md rounded-xl p-3 border border-emerald-500/30"><p className="text-xs font-bold text-emerald-300 mb-1 flex items-center gap-1"><ArrowUpRight className="w-3 h-3" /> Ponto Forte</p><p className="text-xs text-blue-50 leading-tight">{insight.destaquePositivo}</p></div>
+                <div className="bg-white/45 rounded-2xl p-4">
+                  <p className="text-sm font-semibold flex items-center gap-1.5 mb-1">
+                    <ArrowUpRight className="w-4 h-4" /> Ponto forte
+                  </p>
+                  <p className="text-sm leading-snug text-on-lime/80">{insight.destaquePositivo}</p>
+                </div>
               )}
               {insight.alerta && (
-                <div className="bg-rose-500/20 backdrop-blur-md rounded-xl p-3 border border-rose-500/30"><p className="text-xs font-bold text-rose-300 mb-1 flex items-center gap-1"><AlertCircle className="w-3 h-3" /> Atenção</p><p className="text-xs text-blue-50 leading-tight">{insight.alerta}</p></div>
-              )}
-              {insight.dicaPratica && (
-                <div className="bg-black/20 backdrop-blur-md rounded-xl p-3 border border-white/10 mt-2"><p className="text-xs font-bold text-blue-300 mb-1 flex items-center gap-1">Dica Prática</p><p className="text-xs text-blue-50 leading-tight">{insight.dicaPratica}</p></div>
+                <div className="bg-white/45 rounded-2xl p-4">
+                  <p className="text-sm font-semibold flex items-center gap-1.5 mb-1">
+                    <AlertCircle className="w-4 h-4" /> Atenção
+                  </p>
+                  <p className="text-sm leading-snug text-on-lime/80">{insight.alerta}</p>
+                </div>
               )}
             </div>
-          </div>
-        ) : (
-          <p className="text-blue-200 text-sm mt-4">Não foi possível gerar insights no momento.</p>
-        )}
-      </div>
-    </div>
+          )}
+
+          {insight.dicaPratica && (
+            <p className="flex gap-2 text-sm leading-snug text-on-lime/80 mt-auto">
+              <Lightbulb className="w-4 h-4 shrink-0 mt-0.5 text-on-lime" />
+              {insight.dicaPratica}
+            </p>
+          )}
+        </>
+      ) : (
+        <p className="text-on-lime/80">Não foi possível gerar a análise agora. Tente sincronizar os bancos.</p>
+      )}
+    </section>
   );
 }

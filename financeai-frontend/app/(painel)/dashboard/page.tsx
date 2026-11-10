@@ -1,12 +1,15 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { RefreshCw, Filter, Calendar } from "lucide-react";
+import Link from "next/link";
+import { RefreshCw, Calendar, ArrowUpRight, Plus } from "lucide-react";
 import { SummaryCards } from "../../components/SummaryCards";
 import { ExpenseChart } from "../../components/ExpenseChart";
 import { AiInsights } from "../../components/AiInsights";
+import { RecentTransactions } from "../../components/RecentTransactions";
 
-const CORES_GRAFICO = ["#f43f5e", "#0ea5e9", "#10b981", "#8b5cf6", "#f59e0b", "#06b6d4", "#ec4899", "#64748b"];
+// Paleta das categorias: tons terrosos e verdes que conversam com o lima da marca
+const CORES_GRAFICO = ["#2f5d1e", "#9fd45b", "#e0a43a", "#4e8fb0", "#d9674e", "#7f9a6b", "#c9b98c", "#5b6470"];
 
 // Gera as opções referentes aos últimos 6 meses para utilização no filtro de insights da IA
 const gerarUltimosMeses = () => {
@@ -53,6 +56,7 @@ export default function DashboardPage() {
   
   const [resumo, setResumo] = useState({ entradas: 0, saidas: 0, saldo: 0, grafico: [] });
   const [insight, setInsight] = useState<any>(null);
+  const [recentes, setRecentes] = useState<any[]>([]);
 
   // Recupera o ID do usuário local e dispara as chamadas iniciais de dados assim que o componente é montado
   useEffect(() => {
@@ -61,6 +65,7 @@ export default function DashboardPage() {
     if (id) {
       carregarDashboard(id, dataInicio, dataFim);
       carregarInsight(id, filtroIA);
+      carregarRecentes(id);
     }
   }, []);
 
@@ -94,6 +99,20 @@ export default function DashboardPage() {
       console.error(error);
     }
     setLoadingDados(false);
+  };
+
+  // Busca as 4 transações mais recentes para o cartão de últimas transações
+  const carregarRecentes = async (id: string) => {
+    try {
+      const res = await fetch(`http://localhost:3333/api/transacoes/${id}`);
+      if (res.ok) {
+        const data = await res.json();
+        const ordenadas = [...data].sort((a: any, b: any) => new Date(b.dataOcorrencia).getTime() - new Date(a.dataOcorrencia).getTime());
+        setRecentes(ordenadas.slice(0, 4));
+      }
+    } catch (error) {
+      console.error(error);
+    }
   };
 
   // Obtém os insights de IA, utilizando armazenamento em cache no localStorage para otimizar requisições
@@ -136,10 +155,9 @@ export default function DashboardPage() {
         return;
       }
 
-      const { dataInicio: inicioIA, dataFim: fimIA } = obterDatasDoMes(filtroIA);
-      const resAntes = await fetch(`http://localhost:3333/api/dashboard/${userId}?dataInicio=${inicioIA}&dataFim=${fimIA}`);
-      const dadosAntes = await resAntes.json();
-      const volumeAntes = dadosAntes.entradas + dadosAntes.saidas; // Utiliza a soma total das operações como um hash de verificação
+      const resAntesGlobal = await fetch(`http://localhost:3333/api/dashboard/${userId}`);
+      const dadosAntesGlobal = await resAntesGlobal.json();
+      const volumeAntesGlobal = dadosAntesGlobal.entradas + dadosAntesGlobal.saidas;
 
       for (const banco of bancos) {
         await fetch("http://localhost:3333/api/transacoes/sincronizar", {
@@ -148,19 +166,27 @@ export default function DashboardPage() {
         });
       }
 
-      const resDepois = await fetch(`http://localhost:3333/api/dashboard/${userId}?dataInicio=${inicioIA}&dataFim=${fimIA}`);
-      const dadosDepois = await resDepois.json();
-      const volumeDepois = dadosDepois.entradas + dadosDepois.saidas;
+      const resDepoisGlobal = await fetch(`http://localhost:3333/api/dashboard/${userId}`);
+      const dadosDepoisGlobal = await resDepoisGlobal.json();
+      const volumeDepoisGlobal = dadosDepoisGlobal.entradas + dadosDepoisGlobal.saidas;
 
-      if (volumeAntes !== volumeDepois) {
-        console.log("💰 Novas movimentações detectadas! Apagando cache e chamando o Consultor IA...");
-        localStorage.removeItem(`finai_insight_${userId}_${filtroIA}`);
+      if (volumeAntesGlobal !== volumeDepoisGlobal) {
+        console.log("💰 Novas movimentações detectadas! Apagando todos os caches da IA...");
+        const keysToRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith(`finai_insight_${userId}_`)) {
+            keysToRemove.push(key);
+          }
+        }
+        keysToRemove.forEach(k => localStorage.removeItem(k));
       } else {
-        console.log("🛡️ Nenhuma transação nova neste mês. Cache mantido, tokens poupados!");
+        console.log("🛡️ Nenhuma transação nova. Caches mantidos, tokens poupados!");
       }
       
       await carregarDashboard(userId, dataInicio, dataFim);
       await carregarInsight(userId, filtroIA); 
+      await carregarRecentes(userId);
       
     } catch (error) {
       alert("Houve um problema ao sincronizar.");
@@ -168,58 +194,91 @@ export default function DashboardPage() {
     setLoadingSync(false);
   };
 
+  const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
   return (
-    <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 ease-out fill-mode-both">
-      
-      {/* Renderiza a seção superior contendo o título da página e o botão de sincronização manual */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4 sm:gap-5">
+
+      {/* Cartão principal: saldo do período, filtro de datas e ações */}
+      <section className="md:col-span-2 lg:col-span-7 bg-surface rounded-[28px] p-6 sm:p-7 flex flex-col gap-8 relative">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex w-full sm:w-auto items-center gap-1 bg-surface-2 rounded-full p-1 pl-3 text-sm [&>input]:min-w-0 [&>input]:flex-1">
+            <Calendar className="w-4 h-4 text-mute shrink-0 hidden sm:block" aria-hidden />
+            <label className="sr-only" htmlFor="data-inicio">Data inicial</label>
+            <input
+              id="data-inicio"
+              type="date"
+              value={dataInicio}
+              onChange={(e) => setDataInicio(e.target.value)}
+              className="bg-transparent px-1.5 py-1.5 font-medium outline-none rounded-full"
+            />
+            <span className="text-mute" aria-hidden>até</span>
+            <label className="sr-only" htmlFor="data-fim">Data final</label>
+            <input
+              id="data-fim"
+              type="date"
+              value={dataFim}
+              onChange={(e) => setDataFim(e.target.value)}
+              className="bg-transparent px-1.5 py-1.5 font-medium outline-none rounded-full"
+            />
+          </div>
+        </div>
+
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white mb-1">Visão Geral</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">Análise refinada com Inteligência Artificial.</p>
+          <p className="text-mute mb-1">Saldo do período</p>
+          {loadingDados ? (
+            <div className="h-16 w-72 max-w-full rounded-2xl bg-surface-2 animate-pulse" />
+          ) : (
+            <p className={`text-5xl sm:text-6xl font-normal tracking-tight ${resumo.saldo < 0 ? "text-neg" : ""}`}>
+              {brl(resumo.saldo)}
+            </p>
+          )}
         </div>
-        <button onClick={handleSincronizar} disabled={loadingSync} className="flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-xl text-sm font-medium shadow-lg shadow-blue-600/20 transition-all group disabled:opacity-70 w-full md:w-auto cursor-pointer">
-          <RefreshCw className={`w-4 h-4 ${loadingSync ? "animate-spin" : "group-hover:rotate-180 transition-transform duration-500"}`} />
-          {loadingSync ? "A Atualizar..." : "Sincronizar Bancos"}
-        </button>
-      </div>
 
-      {/* Componente contendo os campos de inputs de data para a filtragem geral do período de análise */}
-      <div className="bg-white/80 dark:bg-[#0F172A]/80 backdrop-blur-xl border border-slate-200/50 dark:border-slate-800/50 p-4 rounded-2xl shadow-sm flex flex-wrap items-center gap-4">
-        <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 font-medium text-sm mr-2">
-          <Filter className="w-4 h-4" /> Período de Análise:
+        <div className="flex flex-wrap items-center gap-2 pr-20">
+          <button
+            onClick={handleSincronizar}
+            disabled={loadingSync}
+            className="h-11 px-5 rounded-full bg-primary text-on-primary text-sm font-semibold flex items-center gap-2 hover:opacity-90 transition-opacity disabled:opacity-60"
+          >
+            <RefreshCw className={`w-4 h-4 ${loadingSync ? "animate-spin" : ""}`} />
+            {loadingSync ? "A sincronizar..." : "Sincronizar bancos"}
+          </button>
+          <Link
+            href="/bancos"
+            className="h-11 px-5 rounded-full border border-line text-sm font-semibold flex items-center gap-2 hover:bg-surface-2 transition-colors"
+          >
+            <Plus className="w-4 h-4" /> Conectar banco
+          </Link>
         </div>
-        
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 transition-colors focus-within:border-blue-500/50 focus-within:ring-1 focus-within:ring-blue-500/50">
-            <Calendar className="w-4 h-4 text-slate-400" />
-            <input 
-              type="date" 
-              value={dataInicio} 
-              onChange={(e) => setDataInicio(e.target.value)} 
-              className="bg-transparent text-sm font-semibold text-slate-700 dark:text-slate-200 outline-none cursor-pointer scheme-light dark:scheme-dark"
-            />
-            <span className="text-slate-400 font-medium px-1">-</span>
-            <input 
-              type="date" 
-              value={dataFim} 
-              onChange={(e) => setDataFim(e.target.value)} 
-              className="bg-transparent text-sm font-semibold text-slate-700 dark:text-slate-200 outline-none cursor-pointer scheme-light dark:scheme-dark"
-            />
-          </div>
-        </div>
-      </div>
 
-      {loadingDados ? (
-        <div className="flex h-64 items-center justify-center"><RefreshCw className="w-8 h-8 text-blue-500 animate-spin" /></div>
-      ) : (
-        <>
-          <SummaryCards resumo={resumo} />
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <ExpenseChart resumo={resumo} />
-            <AiInsights insight={insight} loadingInsight={loadingInsight} filtroIA={filtroIA} setFiltroIA={setFiltroIA} opcoesMeses={opcoesMeses} />
-          </div>
-        </>
-      )}
+        <Link
+          href="/transacoes"
+          aria-label="Ver todas as transações"
+          className="absolute right-6 bottom-6 sm:right-7 sm:bottom-7 w-16 h-16 rounded-full bg-lime text-on-lime flex items-center justify-center hover:scale-105 transition-transform"
+        >
+          <ArrowUpRight className="w-7 h-7" />
+        </Link>
+      </section>
+
+      <AiInsights
+        className="md:col-span-2 lg:col-span-5"
+        insight={insight}
+        loadingInsight={loadingInsight}
+        filtroIA={filtroIA}
+        setFiltroIA={setFiltroIA}
+        opcoesMeses={opcoesMeses}
+      />
+
+      <div className="lg:col-span-4 grid">
+        <ExpenseChart resumo={resumo} />
+      </div>
+      <div className="lg:col-span-4 grid">
+        <SummaryCards resumo={resumo} />
+      </div>
+      <div className="md:col-span-2 lg:col-span-4 grid">
+        <RecentTransactions transacoes={recentes} />
+      </div>
     </div>
   );
 }

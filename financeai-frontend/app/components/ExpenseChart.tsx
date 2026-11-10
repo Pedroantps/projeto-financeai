@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircle } from "lucide-react";
+import { PieChart as PieIcon } from "lucide-react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import { useTheme } from "./ThemeProvider";
 
@@ -11,40 +11,61 @@ interface ExpenseChartProps {
   };
 }
 
+const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
 export function ExpenseChart({ resumo }: ExpenseChartProps) {
   const { theme } = useTheme();
 
   return (
-    <div className="lg:col-span-2 bg-white/80 dark:bg-[#0F172A]/80 backdrop-blur-xl border border-slate-200/50 dark:border-slate-800/50 p-6 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.02)]">
-      <h3 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white mb-6">Gastos por Categoria</h3>
-      {resumo.grafico.length === 0 ? (
-         <div className="h-75 flex flex-col items-center justify-center text-slate-400">
-           <AlertCircle className="w-10 h-10 mb-2 opacity-50" />
-           <p>Sem gastos neste período.</p>
-         </div>
-      ) : (
-        <div className="h-75 w-full relative">
-          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-10">
-            <span className="text-sm font-medium text-slate-500">Total</span>
-            <span className="text-2xl font-bold text-slate-900 dark:text-white">
-              R$ {resumo.saidas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-            </span>
-          </div>
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie data={resumo.grafico} cx="50%" cy="50%" innerRadius={100} outerRadius={130} paddingAngle={5} dataKey="value" stroke="none">
-                {resumo.grafico.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
-              </Pie>
-              <Tooltip formatter={(value: any) => `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} contentStyle={{ backgroundColor: theme === 'dark' ? '#0F172A' : '#ffffff', borderRadius: '16px', border: theme === 'dark' ? '1px solid #1e293b' : '1px solid #e2e8f0' }} itemStyle={{ color: theme === 'dark' ? '#f8fafc' : '#0f172a', fontWeight: 600 }} />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-      <div className="flex flex-wrap items-center justify-center gap-4 mt-4">
-        {resumo.grafico.map((item, i) => (
-          <div key={i} className="flex items-center gap-2"><span className="w-3 h-3 rounded-full shadow-sm" style={{ backgroundColor: item.color }} /><span className="text-sm font-medium text-slate-600 dark:text-slate-300">{item.name}</span></div>
-        ))}
+    <section className="bg-surface rounded-[28px] p-6 flex flex-col">
+      <div className="flex items-center gap-3 mb-4">
+        <span className="w-10 h-10 rounded-full border border-line flex items-center justify-center">
+          <PieIcon className="w-4 h-4" />
+        </span>
+        <h2 className="text-lg font-medium">Gastos por categoria</h2>
       </div>
-    </div>
+
+      {resumo.grafico.length === 0 ? (
+        <div className="flex-1 min-h-56 flex flex-col items-center justify-center text-center text-mute">
+          <p className="font-medium text-ink">Sem gastos neste período</p>
+          <p className="text-sm mt-1">Mude as datas ou sincronize os bancos.</p>
+        </div>
+      ) : (
+        <>
+          <div className="h-56 w-full relative">
+            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+              <span className="text-2xl font-medium tracking-tight">{brl(resumo.saidas)}</span>
+              <span className="text-sm text-mute">total gasto</span>
+            </div>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={resumo.grafico} cx="50%" cy="50%" innerRadius={78} outerRadius={98} paddingAngle={3} cornerRadius={8} dataKey="value" stroke="none">
+                  {resumo.grafico.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
+                </Pie>
+                <Tooltip
+                  formatter={(value: any) => brl(Number(value))}
+                  contentStyle={{
+                    backgroundColor: theme === "dark" ? "#1a1d18" : "#ffffff",
+                    borderRadius: 14,
+                    border: `1px solid ${theme === "dark" ? "#2c3027" : "#e2e4de"}`,
+                  }}
+                  itemStyle={{ color: theme === "dark" ? "#eef1ea" : "#151813", fontWeight: 600 }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+
+          <ul className="grid grid-cols-1 gap-y-2.5 mt-5">
+            {resumo.grafico.map((item, i) => (
+              <li key={i} className="flex items-center gap-2 min-w-0 text-sm">
+                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
+                <span className="truncate">{item.name}</span>
+                <span className="ml-auto text-mute shrink-0">{brl(item.value)}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </section>
   );
 }

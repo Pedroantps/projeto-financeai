@@ -18,7 +18,7 @@ const getEstiloBanco = (nome: string) => {
   if (nomeLower.includes("brasil") || nomeLower.includes("bb")) return { bg: "bg-yellow-400", text: "text-slate-900" };
   if (nomeLower.includes("santander")) return { bg: "bg-red-500", text: "text-white" };
   if (nomeLower.includes("inter")) return { bg: "bg-orange-400", text: "text-white" };
-  return { bg: "bg-blue-600", text: "text-white" };
+  return { bg: "bg-surface-2", text: "text-ink" };
 };
 
 export default function BancosPage() {
@@ -122,68 +122,65 @@ export default function BancosPage() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 ease-out fill-mode-both relative">
-      
-      <div className="flex items-center justify-between mb-8">
+    <div className="space-y-4 sm:space-y-5 relative">
+
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 pt-2">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white mb-1">
-            Conexões Bancárias
+          <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight mb-1">
+            Conexões bancárias
           </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
+          <p className="text-mute">
             Gerencie as suas contas ligadas via Open Finance de forma segura.
           </p>
         </div>
-        <button onClick={handleConectarBanco} className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-xl text-sm font-medium shadow-lg shadow-blue-600/20 transition-all group cursor-pointer">
-          <Plus className="w-4 h-4 group-hover:rotate-90 transition-transform duration-300" />
-          Conectar Novo Banco
+        <button onClick={handleConectarBanco} className="self-start sm:self-auto flex items-center gap-2 h-11 px-5 rounded-full bg-primary text-on-primary text-sm font-semibold hover:opacity-90 transition-opacity">
+          <Plus className="w-4 h-4" />
+          Conectar banco
         </button>
       </div>
 
       {loadingBancos ? (
         <div className="flex justify-center items-center h-40">
-          <RefreshCw className="w-8 h-8 text-blue-500 animate-spin" />
+          <RefreshCw className="w-7 h-7 text-mute animate-spin" />
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
           {bancos.map((bank) => {
             const estilo = getEstiloBanco(bank.banco);
             return (
-              <div key={bank.id} className={`group relative bg-white/80 dark:bg-[#0F172A]/80 backdrop-blur-xl border border-slate-200/50 dark:border-slate-800/50 p-6 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.02)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.1)] transition-all duration-300 ${isDeleting === bank.id ? 'opacity-50 scale-95' : 'hover:shadow-lg hover:-translate-y-1'}`}>
-                <button onClick={() => handleDelete(bank.id)} disabled={isDeleting === bank.id} className="absolute top-4 right-4 p-2 rounded-xl text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10 dark:hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all disabled:opacity-0 cursor-pointer">
-                  <Trash2 className="w-5 h-5" />
+              <div key={bank.id} className={`relative bg-surface p-6 rounded-[28px] transition-opacity ${isDeleting === bank.id ? "opacity-50" : ""}`}>
+                <button onClick={() => handleDelete(bank.id)} disabled={isDeleting === bank.id} aria-label={`Remover ${bank.banco}`} className="absolute top-5 right-5 w-9 h-9 rounded-full flex items-center justify-center text-mute hover:bg-neg/10 hover:text-neg transition-colors disabled:opacity-0">
+                  <Trash2 className="w-4 h-4" />
                 </button>
-                <div className="flex items-center gap-4 mb-5">
-                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-inner ${estilo.bg}`}>
-                    <Building2 className={`w-7 h-7 ${estilo.text}`} />
+                <div className="flex items-center gap-4 mb-6 pr-10">
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${estilo.bg}`}>
+                    <Building2 className={`w-5 h-5 ${estilo.text}`} />
                   </div>
-                  <div>
-                    <h3 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">{bank.banco}</h3>
-                    <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Conta Sincronizada</p>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800/50 pt-4 mt-2">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                    <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">Ativo e Seguro</span>
+                  <div className="min-w-0">
+                    <h3 className="text-lg font-semibold truncate">{bank.banco}</h3>
+                    <p className="text-sm text-mute">Conta sincronizada</p>
                   </div>
                 </div>
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-lime/35 dark:bg-lime/15 text-on-lime dark:text-lime px-3 py-1 text-sm font-medium">
+                  <CheckCircle2 className="w-4 h-4" /> Ativa, somente leitura
+                </span>
               </div>
             );
           })}
 
           {/* Cartão "Adicionar Novo" */}
-          <button onClick={handleConectarBanco} className="flex flex-col items-center justify-center gap-3 bg-slate-50/50 dark:bg-slate-900/30 border-2 border-dashed border-slate-200 dark:border-slate-800 hover:border-blue-500/50 hover:bg-blue-50/50 dark:hover:bg-blue-900/10 p-6 rounded-3xl transition-all group min-h-40 cursor-pointer">
-            <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center group-hover:bg-blue-100 dark:group-hover:bg-blue-900/30 transition-colors">
-              <Plus className="w-6 h-6 text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-500 transition-colors" />
-            </div>
-            <span className="text-sm font-semibold text-slate-500 dark:text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400">Adicionar nova conta</span>
+          <button onClick={handleConectarBanco} className="flex flex-col items-center justify-center gap-3 border-2 border-dashed border-line hover:bg-surface p-6 rounded-[28px] transition-colors group min-h-40">
+            <span className="w-12 h-12 rounded-full bg-lime text-on-lime flex items-center justify-center">
+              <Plus className="w-5 h-5" />
+            </span>
+            <span className="text-sm font-semibold">Adicionar nova conta</span>
           </button>
         </div>
       )}
 
       {isPluggyOpen && connectToken && (
-        <div className="fixed inset-0 z-100 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md animate-in fade-in duration-300">
-          <div className="w-full max-w-md h-150 bg-white rounded-3xl overflow-hidden shadow-2xl relative animate-in zoom-in-95 duration-300">
+        <div className="fixed inset-0 z-100 flex items-center justify-center p-4 bg-black/40">
+          <div className="w-full max-w-md h-150 max-h-[90vh] bg-white rounded-[28px] overflow-hidden shadow-2xl relative">
              <PluggyConnect connectToken={connectToken} includeSandbox={false} onSuccess={handlePluggySuccess} onError={(error: any) => console.error(error)} onClose={() => setIsPluggyOpen(false)} />
           </div>
         </div>

@@ -1,5 +1,12 @@
 import "./globals.css";
+import { Urbanist } from "next/font/google";
 import { ThemeProvider } from "./components/ThemeProvider";
+
+const urbanist = Urbanist({
+  subsets: ["latin"],
+  variable: "--font-urbanist",
+  display: "swap",
+});
 
 export const metadata = {
   title: "FinanceAI - Inteligência Financeira",
@@ -12,10 +19,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="pt-BR" suppressHydrationWarning>
-      {/* As cores de fundo base ficam logo no body */}
-      {/* Define as cores de fundo diretamente no body para garantir a aplicação uniforme em toda a tela */}
-      <body className="bg-slate-50 dark:bg-[#020617] text-slate-900 dark:text-white transition-colors duration-500">
+    <html lang="pt-BR" className={urbanist.variable} suppressHydrationWarning>
+      <body className="font-sans">
         <ThemeProvider>
           {children}
         </ThemeProvider>
