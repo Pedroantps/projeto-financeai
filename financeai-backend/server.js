@@ -41,7 +41,6 @@ app.post('/api/cadastro', async (req, res) => {
         const usuarioExistente = await prisma.usuario.findUnique({ where: { email } });
         if (usuarioExistente) return res.status(400).json({ erro: "Este e-mail já está em uso." });
 
-        // Observação: Para cenários de produção, é obrigatória a utilização de bibliotecas como bcrypt para o hash das senhas
         const novoUsuario = await prisma.usuario.create({
             data: { nome, email, senha } 
         });
@@ -72,8 +71,6 @@ app.post('/api/login', async (req, res) => {
 });
 
 // Define os endpoints responsáveis pela integração bancária inicial e o gerenciamento das conexões de conta
-
-// Rota para a geração do token do Connect Widget da Pluggy, consumido posteriormente pelo front-end
 app.get('/api/pluggy/token', async (req, res) => {
     try {
         const tokenData = await pluggyClient.createConnectToken();
@@ -84,7 +81,6 @@ app.get('/api/pluggy/token', async (req, res) => {
     }
 });
 
-// Registra no banco de dados a referência e os metadados de uma conta bancária recém conectada
 app.post('/api/bancos', async (req, res) => {
     try {
         const { usuarioId, pluggyItemId, banco } = req.body;
@@ -102,7 +98,6 @@ app.post('/api/bancos', async (req, res) => {
     }
 });
 
-// Retorna a listagem de todas as conexões bancárias ativas e válidas vinculadas a um determinado usuário
 app.get('/api/bancos/usuario/:id', async (req, res) => {
     try {
         const bancos = await prisma.conexaoBancaria.findMany({
@@ -115,7 +110,6 @@ app.get('/api/bancos/usuario/:id', async (req, res) => {
     }
 });
 
-// Remove uma conexão bancária do sistema e exclui automaticamente todas as transações nela atreladas (deleção em cascata)
 app.delete('/api/bancos/:id', async (req, res) => {
     try {
         const { id } = req.params;
@@ -130,7 +124,6 @@ app.delete('/api/bancos/:id', async (req, res) => {
 });
 
 // Endpoints principais que orquestram a importação do extrato, o processamento de linguagem natural e a categorização via IA
-
 app.post('/api/transacoes/sincronizar', async (req, res) => {
     try {
         const { conexaoId } = req.body;
@@ -139,7 +132,6 @@ app.post('/api/transacoes/sincronizar', async (req, res) => {
 
         console.log(`🔗 Buscando contas na Pluggy para: ${conexao.banco}...`);
         
-        // Utiliza o SDK da Pluggy para facilitar o acesso e a busca paginada pelas contas dessa conexão específica
         const accounts = await pluggyClient.fetchAccounts(conexao.pluggyItemId);
         if (!accounts.results || accounts.results.length === 0) {
             return res.status(400).json({ erro: "Nenhuma conta encontrada neste banco." });
@@ -162,17 +154,18 @@ app.post('/api/transacoes/sincronizar', async (req, res) => {
             const loteCru = todasTransacoes.slice(i, i + tamanhoDoLote);
             console.log(`🧠 IA analisando lote (${i + 1} a ${i + loteCru.length}) de ${todasTransacoes.length}...`);
 
+            // ECONOMIA DE TOKENS: Retirada a informação da Fatura, deixada só as essenciais para a IA ler o nome e categoria
             const listaParaIA = loteCru.map(t => {
-                const temFatura = t.creditCardMetadata ? "Sim" : "Null";
-                return `[Valor: ${t.amount} | Cat. Banco: ${t.category || "Vazia"} | Fatura: ${temFatura}] ${t.description}`;
+                return `[Valor: ${t.amount} | Cat. Banco: ${t.category || "Vazia"}] ${t.description}`;
             }).join(" || ");
             
+            // PROMPT OTIMIZADO: IA não perde mais tempo tentando descobrir o Tipo de Pagamento
             const prompt = `
             Você é um analista financeiro sênior. Analise as transações separadas por " || ".
             Para CADA UMA, devolva um JSON estrito contendo um array de objetos chamado "transacoes" com as seguintes chaves exatas:
             - "descricaoOriginal": (mantenha a descrição exata enviada)
             - "nomeLimpo": (Remova códigos, datas e símbolos. Deixe APENAS o nome limpo da empresa. Ex: "Uber", "McDonalds", "Mercado Livre")
-            - "categoria": (REGRA 1: Olhe a 'Cat. Banco' que eu enviei. Se for útil, use-a como base e traduza. Se for vazia ou genérica, deduza pelo nome. 
+            - "categoria": (REGRA 1: Olhe a 'Cat. Banco' que eu enviei. Se for útil, use-a como base e traduza. Se for vazia ou genérica, deduza pelo nome. Se não conseguir deduzir, use "Outros". Se a base devolver algo muto genérico como "compras", tente ser mais específico se possível, como "Alimentação" ou "Moda", dependendo da descrição (pode deduzir).
                REGRA 2: Encaixe OBRIGATORIAMENTE em UMA destas opções: 
                1. "Supermercado" (atacados, mercados, hortifruti)
                2. "Alimentação" (restaurantes, iFood, lanches)
@@ -182,7 +175,6 @@ app.post('/api/transacoes/sincronizar', async (req, res) => {
                6. "Assinaturas" (Netflix, Spotify)
                7. Use também: Moradia, Educação, Lazer, Serviços, Transferências, Salário, Investimentos. 
                Se não encaixar em nada, use "Outros".)
-            - "tipoPagamento": (REGRA: Se a 'Fatura' for 'Sim', é "Cartão de Crédito". Se tiver "PIX", é "PIX". Se a 'Fatura' for 'Null' e for negativo, é "Cartão de Débito". Se for positivo, é "Recebimento".)
             
             Transações a processar: ${listaParaIA}
             `;
@@ -203,12 +195,22 @@ app.post('/api/transacoes/sincronizar', async (req, res) => {
                     const tLimpa = transacoesLimpas[j];
                     const dataFaturaReal = tCrua.creditCardMetadata?.billDate ? new Date(tCrua.creditCardMetadata.billDate) : null;
 
+                    // 💡 LÓGICA DETERMINÍSTICA DO ENGENHEIRO (SEM IA) PARA TIPO DE PAGAMENTO
+                    let tipoPagamentoCalculado = "Cartão de Débito"; // Padrão de saída
+                    if (tCrua.creditCardMetadata) {
+                        tipoPagamentoCalculado = "Cartão de Crédito";
+                    } else if (tCrua.description.toUpperCase().includes("PIX") || (tCrua.paymentData && tCrua.paymentData.paymentMethod === 'PIX')) {
+                        tipoPagamentoCalculado = "PIX";
+                    } else if (tCrua.amount > 0) {
+                        tipoPagamentoCalculado = "Recebimento";
+                    }
+
                     const transacaoSalva = await prisma.transacao.upsert({
                         where: { pluggyTransactionId: tCrua.id },
                         update: {
                             nomeLimpo: tLimpa?.nomeLimpo || tCrua.description,
                             categoria: tLimpa?.categoria || "Outros",
-                            tipoPagamento: tLimpa?.tipoPagamento || (tCrua.amount > 0 ? "Recebimento" : "Cartão de Débito"),
+                            tipoPagamento: tipoPagamentoCalculado, // Agora o código define
                             dataFatura: dataFaturaReal
                         }, 
                         create: {
@@ -218,7 +220,7 @@ app.post('/api/transacoes/sincronizar', async (req, res) => {
                             categoria: tLimpa?.categoria || "Outros",
                             valor: tCrua.amount, 
                             dataOcorrencia: new Date(tCrua.date), 
-                            tipoPagamento: tLimpa?.tipoPagamento || (tCrua.amount > 0 ? "Recebimento" : "Cartão de Débito"),
+                            tipoPagamento: tipoPagamentoCalculado, // Agora o código define
                             dataFatura: dataFaturaReal,
                             conexaoId: conexao.id
                         }
@@ -312,7 +314,7 @@ app.get('/api/dashboard/:usuarioId', async (req, res) => {
 app.get('/api/insights/:usuarioId', async (req, res) => {
     try {
         const { usuarioId } = req.params;
-        const { dataInicio, dataFim } = req.query; // Extrai os parâmetros de data através da querystring para a aplicação de restrições de período
+        const { dataInicio, dataFim } = req.query;
 
         const conexoes = await prisma.conexaoBancaria.findMany({
             where: { usuarioId: usuarioId },
@@ -329,7 +331,6 @@ app.get('/api/insights/:usuarioId', async (req, res) => {
             });
         }
 
-        // Configura a restrição condicional de datas, adotando os últimos 30 dias corridos como o valor padrão de segurança
         let filtroData = {};
         if (dataInicio && dataFim) {
             filtroData = {
@@ -404,7 +405,6 @@ app.get('/api/insights/:usuarioId', async (req, res) => {
     }
 });
 
-// Conclui as instâncias e inicia a aplicação, habilitando o servidor para a recepção de requisições na porta especificada
 app.listen(PORT, () => {
     console.log(`🚀 Servidor rodando na porta http://localhost:${PORT}`);
 });
